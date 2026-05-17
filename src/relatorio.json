@@ -1,0 +1,7 @@
+[
+  {
+    "porta": 80,
+    "status": "Aberta",
+    "servico": "HTTP/1.1 301 Moved Permanently"
+  }
+]
