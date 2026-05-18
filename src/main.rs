@@ -7,6 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::fs::File;
 use serde::Serialize;
 use std::sync::Mutex;
+use clap::Parser;
 
 #[derive(Serialize, Clone)]
 struct ResultadoPorta {
@@ -15,38 +16,48 @@ struct ResultadoPorta {
     servico: String,
 }
 
+#[derive(Parser, Debug)]
+#[command(name = "sentinel-rs", author = "Luiz Grochevski", version = "1.0", about = "Scanner de portas assíncrono e ultra rápido")]
+struct Cli {
+    target: String,
+
+    #[arg(short = 'p', long = "ports", default_value = "1-1000")]
+    ports: String,
+
+    #[arg(short = 't', long = "threads", default_value = "50")]
+    threads: usize,
+}
+
 #[tokio::main]
 async fn main() {
-    let mut input_ip_alvo = String::new();
-    let mut input_porta_inicio = String::new();
-    let mut input_porta_fim = String::new();
 
-    let semaforo = Arc::new(Semaphore::new(50));
+    let args = Cli::parse();
+
+    let ip_alvo = args.target;
+    let limite_threads = args.threads;
+
+    let partes_porta: Vec<&str> = args.ports.split('-').collect();
+    if partes_porta.len() != 2 {
+        eprintln!("Erro: O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
+        std::process::exit(1);
+    }
+
+    let porta_inicial: u16 = partes_porta[0].parse().expect("Porta inicial inválida");
+    let porta_final: u16 = partes_porta[1].parse().expect("Porta final inválida");
+
+    let semaforo = Arc::new(Semaphore::new(limite_threads));
     let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
 
-    println!("Digite o ip para o scan:");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut input_ip_alvo).expect("Falha ao ler o input");
-    let ip_alvo = input_ip_alvo.trim().to_string();
-
-    println!("Digite a porta INICIAL:");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut input_porta_inicio).expect("Falha ao ler a porta inicial");
-    let porta_inicial: u16 = input_porta_inicio.trim().parse().expect("Digite um número válido!");
-
-    println!("Digite a porta FINAL:");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut input_porta_fim).expect("Falha ao ler a porta final");
-    let porta_final: u16 = input_porta_fim.trim().parse().expect("Digite um número válido");
-
     let portas = porta_inicial..=porta_final;
-
-    println!("Iniciando scan em {} (Portas {} até {})...", ip_alvo, porta_inicial, porta_final);
-
-    let mut tarefas = vec![];
-
     let total_portas = porta_final - porta_inicial + 1;
     let mut escaneadas = 0;
+
+    println!("🛡 Sentinel-RS iniciado!");
+    println!("Alvo: {}", ip_alvo);
+    println!("Intervalo: {} até {}", porta_inicial, porta_final);
+    println!("Concorrência máxima: {} conexões simultâneas\n", limite_threads);
+
+    let mut tarefas = vec![];
 
     for porta in portas {
         let permissao = Arc::clone(&semaforo);
@@ -96,6 +107,7 @@ async fn main() {
     println!("Scan finalizado! Gerando relatório...");
 
     let dados_finais = resultados_compartilhados.lock().unwrap();
+    
     if !dados_finais.is_empty() {
         let arquivo = File::create("relatorio.json").expect("Não foi possível criar o arquivo");
         serde_json::to_writer_pretty(arquivo, &*dados_finais).expect("Erro ao escrever o JSON");
