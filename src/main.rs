@@ -2,13 +2,13 @@ use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use std::io::{self, Write};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::fs::File;
 use serde::Serialize;
 use std::sync::Mutex;
 use clap::Parser;
 use colored::*;
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Serialize, Clone)]
 struct ResultadoPorta {
@@ -51,7 +51,6 @@ async fn main() {
 
     let portas = porta_inicial..=porta_final;
     let total_portas = porta_final - porta_inicial + 1;
-    let mut escaneadas = 0;
 
     println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
     println!("{} {}", "Alvo:".cyan(), ip_alvo);
@@ -60,14 +59,22 @@ async fn main() {
 
     let mut tarefas = vec![];
 
+    let barra = ProgressBar::new(total_portas.into());
+    barra.set_style(
+       ProgressStyle::default_bar()
+          .template("{spinner:.green} [{elapsed_presise}] [{bar:40.cyan/blue}] {pos}/{len} portas ({eta})")
+          .unwrap()
+          .progress_chars("#>-"),
+    );
+
+
+    let barra_compartilhada = Arc::new(barra);
+
     for porta in portas {
         let permissao = Arc::clone(&semaforo);
         let ip = ip_alvo.clone();
         let lista_resultados = Arc::clone(&resultados_compartilhados);
-        escaneadas += 1;
-
-        println!("\rEscaneando: {}/{} portas...", escaneadas, total_portas);
-        io::stdout().flush().unwrap();
+        let pb = Arc::clone(&barra_compartilhada);
 
         let tarefa = tokio::spawn(async move {
             let _guarda = permissao.acquire().await.unwrap();
@@ -87,7 +94,10 @@ async fn main() {
                     _ => "Desconhecido".to_string(),
                 };
 
-                println!("\r[+] Porta {} ABERTA | Serviço: {}", porta, servico_detectado);
+                pb.suspend(|| {
+                    let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", porta, servico_detectado);
+                    println!("{}", alerta.green().bold());
+                });
 
                 let mut dados = lista_resultados.lock().unwrap();
                 dados.push(ResultadoPorta {
@@ -96,6 +106,8 @@ async fn main() {
                     servico: servico_detectado,
                 });
             }
+
+            pb.inc(1);
         });
 
         tarefas.push(tarefa);
@@ -104,6 +116,8 @@ async fn main() {
     for t in tarefas {
         let _ = t.await;
     }
+
+    barra_compartilhada.finish_and_clear();
 
     println!("\n\n{}" ,"Scan finalizado! Gerando relatório...".yellow());
 
