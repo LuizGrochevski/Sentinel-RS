@@ -8,6 +8,7 @@ use std::fs::File;
 use serde::Serialize;
 use std::sync::Mutex;
 use clap::Parser;
+use colored::*;
 
 #[derive(Serialize, Clone)]
 struct ResultadoPorta {
@@ -38,7 +39,7 @@ async fn main() {
 
     let partes_porta: Vec<&str> = args.ports.split('-').collect();
     if partes_porta.len() != 2 {
-        eprintln!("Erro: O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
+        eprintln!("{}", "Erro: O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)".red().bold());
         std::process::exit(1);
     }
 
@@ -52,10 +53,10 @@ async fn main() {
     let total_portas = porta_final - porta_inicial + 1;
     let mut escaneadas = 0;
 
-    println!("🛡 Sentinel-RS iniciado!");
-    println!("Alvo: {}", ip_alvo);
-    println!("Intervalo: {} até {}", porta_inicial, porta_final);
-    println!("Concorrência máxima: {} conexões simultâneas\n", limite_threads);
+    println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
+    println!("{} {}", "Alvo:".cyan(), ip_alvo);
+    println!("{} {} até {}", "Intervalo:".cyan(), porta_inicial, porta_final);
+    println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
 
     let mut tarefas = vec![];
 
@@ -104,16 +105,16 @@ async fn main() {
         let _ = t.await;
     }
 
-    println!("Scan finalizado! Gerando relatório...");
+    println!("\n\n{}" ,"Scan finalizado! Gerando relatório...".yellow());
 
     let dados_finais = resultados_compartilhados.lock().unwrap();
     
     if !dados_finais.is_empty() {
         let arquivo = File::create("relatorio.json").expect("Não foi possível criar o arquivo");
         serde_json::to_writer_pretty(arquivo, &*dados_finais).expect("Erro ao escrever o JSON");
-        println!("💾 Relatório salvo com sucesso em 'relatorio.json'!");
+        println!("{}", "💾 Relatório salvo com sucesso em 'relatorio.json'!".green().bold());
     } else {
-        println!("Nenhuma porta aberta encontrada para gerar o relatório.");
+        println!("{}", "Nenhuma porta aberta encontrada para gerar o relatório.".red());
     }
 }
 

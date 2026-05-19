@@ -1,16 +1,6 @@
 [
   {
-    "porta": 443,
-    "status": "Aberta",
-    "servico": "Desconhecido"
-  },
-  {
     "porta": 80,
-    "status": "Aberta",
-    "servico": "HTTP/1.1 301 Moved Permanently"
-  },
-  {
-    "porta": 53,
     "status": "Aberta",
     "servico": "Desconhecido"
   }
