@@ -9,6 +9,22 @@ use std::sync::Mutex;
 use clap::Parser;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::io;
+use std::io::Write;
+
+async fn verificar_host_ativo (ip: &str) -> bool {
+    let portas_teste = vec![80, 443, 22];
+
+    for porta in portas_teste {
+        let endereco = format!("{}:{}", ip, porta);
+        if let Ok(resultado_conexao) = timeout(Duration::from_millis(800), TcpStream::connect(&endereco)).await {
+            if resultado_conexao.is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 fn nome_padrao_porta(porta: u16) -> String {
     match porta {
@@ -135,6 +151,17 @@ async fn main() {
 
     println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
     println!("{} {}", "Alvo:".cyan(), ip_alvo);
+    
+    print!("🔍 Verificando se o host está ativo... ");
+    io::stdout().flush().unwrap();
+    
+    if !verificar_host_ativo(&ip_alvo).await {
+        println!("{}", "OFFLINE".red().bold());
+        println!("{}", "Abortando scan: O alvo parece estar desligado ou bloqueando conexões.".yellow());
+        std::process::exit(0);
+    }
+    println!("{}", "ATIVO (Online)".green().bold());
+
     println!("{} {} até {}", "Intervalo:".cyan(), porta_inicial, porta_final);
     println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
 
