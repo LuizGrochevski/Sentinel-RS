@@ -44,7 +44,6 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
     let mut buffer = [0; 128];
 
     match porta {
-
         22 => {
             if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
@@ -63,7 +62,7 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
                  Host: {}\r\n\
                  User-Agent: SentinelRS/1.0\r\n\
                  Accept: text/html,application/xhtml+xml\r\n\
-                 Connection: close\r\n\r\n", 
+                 Connection: close\r\n\r\n",
                 ip
             );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
@@ -78,9 +77,32 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
 
         5432 => "PostgreSQL".to_string(),
 
-        3306 => "MySQL".to_string(),
+        3306 => {
+            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                if bytes_lidos > 5 {
+                    let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
+                    if resposta.contains("mysql") || resposta.contains("MariaDB") || !resposta.is_empty() {
+                        let versao = resposta.lines().next().unwrap_or("MySQL").trim();
+                        let versao_limpa: String = versao.chars().filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c)).collect();
+                        return format!("MySQL/MariaDB ({})", versao_limpa.trim());
+                    }
+                }
+            }
+            "MySQL (Provável)".to_string()
+        }
 
-        6379 => "Redis".to_string(),
+        6379 => {
+            let probe_redis = "PING\r\n";
+            if fluxo.write_all(probe_redis.as_bytes()).await.is_ok() {
+                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(1), fluxo.read(&mut buffer)).await {
+                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                    if resposta.contains("+PONG") {
+                        return "Redis Cache Server (Ativo)".to_string();
+                    }
+                }
+            }
+            "Redis (Provável)".to_string()
+        }
 
         _ => {
             let requisicao = format!(
@@ -88,7 +110,7 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
                  Host: {}\r\n\
                  User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n\
                  Accept: text/html,application/xhtml+xml\r\n\
-                 Connection: close\r\n\r\n", 
+                 Connection: close\r\n\r\n",
                 ip
             );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
@@ -102,11 +124,12 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
                     }
                 }
             }
-
             nome_padrao_porta(porta)
         }
     }
 }
+
+ 
 
 #[derive(Serialize, Clone)]
 struct ResultadoPorta {
@@ -258,7 +281,8 @@ async fn main() {
            tarefas.push(tarefa);
        }
     }
-
+    
+    for t in tarefas { let _ = t.await; }
     barra_compartilhada.finish_and_clear();
 
     println!("\n\n{}" ,"Scan finalizado! Gerando relatório...".yellow());
