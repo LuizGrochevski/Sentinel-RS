@@ -10,6 +10,55 @@ use clap::Parser;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 
+async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String {
+    let mut buffer = [0; 128];
+
+    match porta {
+        22 => {
+            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                if bytes_lidos > 0 {
+                    let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                    return banner.lines().next().unwrap_or("SSH").trim().to_string();
+                }
+            }
+            "SSH (Sem Banner)".to_string()
+        }
+
+        53 => "DNS (TCP)".to_string(),
+
+        443 => {
+            let requisicao = format!("HEAD / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
+            if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
+                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                    if bytes_lidos > 0 {
+                        return "HTTPS (Possível)".to_string();
+                    }
+                }
+            }
+            "HTTPS".to_string()
+        }
+
+        5432 => "PostgreSQL".to_string(),
+
+        3306 => "MySQL".to_string(),
+
+        6379 => "Redis".to_string(),
+
+        _ => {
+            let requisicao = format!("HEAD / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
+            if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
+                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                    if bytes_lidos > 0 {
+                        let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                        return banner.lines().next().unwrap_or("HTTP").trim().to_string();
+                    }
+                }
+            }
+            "Desconhecido".to_string()
+        }
+    }
+}
+
 #[derive(Serialize, Clone)]
 struct ResultadoPorta {
     porta: u16,
@@ -62,7 +111,7 @@ async fn main() {
     let barra = ProgressBar::new(total_portas.into());
     barra.set_style(
        ProgressStyle::default_bar()
-          .template("{spinner:.green} [{elapsed_presise}] [{bar:40.cyan/blue}] {pos}/{len} portas ({eta})")
+          .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} portas ({eta})")
           .unwrap()
           .progress_chars("#>-"),
     );
@@ -81,18 +130,8 @@ async fn main() {
             let endereco = format!("{}:{}", ip, porta);
 
             if let Ok(Ok(mut fluxo)) = timeout(Duration::from_secs(1), TcpStream::connect(&endereco)).await {
-                let mut buffer = [0; 128];
-
-                let requisicao = format!("HEAD / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
-                let _ = fluxo.write_all(requisicao.as_bytes()).await;
-
-                let servico_detectado = match timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
-                    Ok(Ok(bytes_lidos)) if bytes_lidos > 0 => {
-                        let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                        banner.lines().next().unwrap_or("").trim().to_string()
-                    }
-                    _ => "Desconhecido".to_string(),
-                };
+                
+     		let servico_detectado = detectar_servico(porta, &ip, &mut fluxo).await;
 
                 pb.suspend(|| {
                     let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", porta, servico_detectado);
