@@ -2,6 +2,6 @@
   {
     "porta": 80,
     "status": "Aberta",
-    "servico": "Desconhecido"
+    "servico": "HTTP"
   }
 ]

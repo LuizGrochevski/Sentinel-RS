@@ -10,10 +10,24 @@ use clap::Parser;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 
+fn nome_padrao_porta(porta: u16) -> String {
+    match porta {
+        80 => "HTTP".to_string(),
+        21 => "FTP (Provável)".to_string(),
+        23 => "Telnet (Provável)".to_string(),
+        25 => "SMTP (Provável)".to_string(),
+        110 => "POP3 (Provável)".to_string(),
+        143 => "IMAP (Provável)".to_string(),
+        8080 => "HTTP-Proxy".to_string(),
+        _ => "Desconhecido".to_string(),
+    }
+}
+
 async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String {
     let mut buffer = [0; 128];
 
     match porta {
+
         22 => {
             if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
@@ -27,7 +41,14 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
         53 => "DNS (TCP)".to_string(),
 
         443 => {
-            let requisicao = format!("HEAD / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
+            let requisicao = format!(
+                "HEAD / HTTP/1.1\r\n\
+                 Host: {}\r\n\
+                 User-Agent: SentinelRS/1.0\r\n\
+                 Accept: text/html,application/xhtml+xml\r\n\
+                 Connection: close\r\n\r\n", 
+                ip
+            );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
                 if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                     if bytes_lidos > 0 {
@@ -45,16 +66,27 @@ async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String
         6379 => "Redis".to_string(),
 
         _ => {
-            let requisicao = format!("HEAD / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
+            let requisicao = format!(
+                "HEAD / HTTP/1.1\r\n\
+                 Host: {}\r\n\
+                 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n\
+                 Accept: text/html,application/xhtml+xml\r\n\
+                 Connection: close\r\n\r\n", 
+                ip
+            );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
                 if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                     if bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                        return banner.lines().next().unwrap_or("HTTP").trim().to_string();
+                        let primeira_linha = banner.lines().next().unwrap_or("").trim();
+                        if !primeira_linha.is_empty() {
+                            return primeira_linha.to_string();
+                        }
                     }
                 }
             }
-            "Desconhecido".to_string()
+
+            nome_padrao_porta(porta)
         }
     }
 }
