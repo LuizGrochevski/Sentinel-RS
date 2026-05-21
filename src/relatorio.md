@@ -1,5 +1,6 @@
 # 🛡 Relatório de Scan - Sentinel-RS
 
+
 | IP Alvo | Porta | Status | Serviço Detectado |
 
 | :--- | :--- | :--- | :--- |
