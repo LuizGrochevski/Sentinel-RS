@@ -299,13 +299,13 @@ async fn main() {
 
         let _ = writeln!(arquivo_md, "# 🛡 Relatório de Scan - Sentinel-RS\n");
         let _ = writeln!(arquivo_md, "");
-        let _ = writeln!(arquivo_md, "| IP Alvo | Porta | Status | Serviço Detectado |\n");
-        let _ = writeln!(arquivo_md, "| :--- | :--- | :--- | :--- |\n");
+        let _ = writeln!(arquivo_md, "| IP Alvo | Porta | Status | Serviço Detectado |");
+        let _ = writeln!(arquivo_md, "| :--- | :--- | :--- | :--- |");
 
         for resultado in &*dados_finais {
            let _ = writeln!(
               arquivo_md,
-              "| {} | {} | {} | {} |\n",
+              "| {} | {} | {} | {} |",
               resultado.ip,
               resultado.porta,
               resultado.status,
