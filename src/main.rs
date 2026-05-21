@@ -12,6 +12,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::net::IpAddr;
 use std::str::FromStr;
 use ipnet::IpNet;
+use std::io::Write as IoWrite;
 
 async fn verificar_host_ativo (ip: &str) -> bool {
     let portas_teste = vec![80, 443, 22];
@@ -293,6 +294,42 @@ async fn main() {
         let arquivo = File::create("relatorio.json").expect("Não foi possível criar o arquivo");
         serde_json::to_writer_pretty(arquivo, &*dados_finais).expect("Erro ao escrever o JSON");
         println!("{}", "💾 Relatório salvo com sucesso em 'relatorio.json'!".green().bold());
+
+        let mut arquivo_md = File::create("relatorio.md").expect("Não foi possível criar o Markdown");
+
+        let _ = writeln!(arquivo_md, "# 🛡 Relatório de Scan - Sentinel-RS\n");
+        let _ = writeln!(arquivo_md, "| IP Alvo | Porta | Status | Serviço Detectado |");
+        let _ = writeln!(arquivo_md, "| :=== | :=== | :=== | :=== |");
+
+        for resultado in &*dados_finais {
+           let _ = writeln!(
+              arquivo_md,
+              "| {} | {} | {} | {} |",
+              resultado.ip,
+              resultado.porta,
+              resultado.status,
+              resultado.servico
+              );
+        }
+
+        println!("{}", "📊 Tabela em Markdown gerada em 'relatorio.md'!".green().bold());
+
+        let mut arquivo_csv = File::create("relatorio.csv").expect("Não foi possível crisr o CSV");
+
+        let _ = writeln!(arquivo_csv, "IP;Porta;Status;Servico");
+
+        for resultado_csv in &*dados_finais {
+           let _ = writeln!(
+              arquivo_csv,
+              "{};{};{};{}",
+              resultado_csv.ip,
+              resultado_csv.porta,
+              resultado_csv.status,
+              resultado_csv.servico
+           );
+        }
+
+        println!("{}", "CSV gerado em 'relatorio.csv'!".green().bold());
     } else {
         println!("{}", "Nenhuma porta aberta encontrada para gerar o relatório.".red());
     }
