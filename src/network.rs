@@ -159,7 +159,7 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
         lista_ips.push(ip_unico);
     }
 
-    let semaforo = Arc::new(Semaphore::new(limite_threads));
+    let _semaforo = Arc::new(Semaphore::new(limite_threads));
     let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
 
     println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
@@ -222,45 +222,64 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
           .progress_chars("#>-"),
     );
 
-    let mut tarefas = vec![];
     let barra_compartilhada = Arc::new(barra);
 
-    for ip in ips_ativos {
-       for porta in porta_inicial..=porta_final {
-           let permissao = Arc::clone(&semaforo);
-           let lista_resultados = Arc::clone(&resultados_compartilhados);
-           let pb = Arc::clone(&barra_compartilhada);
-           let ip_clone = ip.clone();
+    struct TrabalhoScan {
+        ip: String,
+        porta: u16,
+    }
 
-           let tarefa = tokio::spawn(async move {
-              if let Ok(_guarda) = permissao.acquire().await {
-                  let endereco = format!("{}:{}", ip_clone, porta);
+    let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
+    let rx_compartilhado = Arc::new(Mutex::new(rx));
 
-                  if let Ok(Ok(mut fluxo)) = timeout(Duration::from_secs(1), TcpStream::connect(&endereco)).await {
-                       let servico_detectado = detectar_servico(porta, &ip_clone, &mut fluxo).await;
+    let mut lista_workers = vec![];
 
-                       pb.suspend(|| {
-                           let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", porta, servico_detectado);
-                           println!("{}", alerta.green().bold());
-                       });
+       for _ in 0..limite_threads {
+        let rx_clone = Arc::clone(&rx_compartilhado);
+        let lista_resultados = Arc::clone(&resultados_compartilhados);
+        let pb = Arc::clone(&barra_compartilhada);
 
-                       let mut dados = lista_resultados.lock().await;
-                       dados.push(ResultadoPorta {
-                           ip: ip_clone,
-                           porta,
-                           status: "Aberta".to_string(),
-                           servico: servico_detectado,
-                       });
-                   }
-                   pb.inc(1);
-              }
-           });
+        let worker = tokio::spawn(async move {
+            while let Some(trabalho) = {
+                let mut guard = rx_clone.lock().await;
+                guard.recv().await
+            } {
+                let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
 
-           tarefas.push(tarefa);
-       }
+                if let Ok(Ok(mut fluxo)) = timeout(Duration::from_secs(1), TcpStream::connect(&endereco)).await {
+                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo).await;
+
+                    pb.suspend(|| {
+                        let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
+                        println!("{}", alerta.green().bold());
+                    });
+
+                    let mut dados = lista_resultados.lock().await;
+                    dados.push(ResultadoPorta {
+                        ip: trabalho.ip,
+                        porta: trabalho.porta,
+                        status: "Aberta".to_string(),
+                        servico: servico_detectado,
+                    });
+                }
+                pb.inc(1);
+            }
+        });
+
+        lista_workers.push(worker);
     }
     
-    for t in tarefas { let _ = t.await; }
+    for ip in ips_ativos {
+        for porta in porta_inicial..=porta_final {
+            let trabalho = TrabalhoScan { ip: ip.clone(), porta };
+            let _ = tx.send(trabalho).await;
+        }
+    }
+    
+    drop(tx);
+
+    for w in lista_workers { let _ = w.await; }
+
     barra_compartilhada.finish_and_clear();
 
     let dados_finais = resultados_compartilhados.lock().await;
