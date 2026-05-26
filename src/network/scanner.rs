@@ -1,0 +1,202 @@
+use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration};
+use tokio::sync::Semaphore;
+use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::net::IpAddr;
+use std::str::FromStr;
+use ipnet::IpNet;
+use colored::*;
+use indicatif::{ProgressBar, ProgressStyle};
+use anyhow::{Context, Result};
+
+use crate::models::{ResultadoPorta, TrabalhoScan};
+use crate::cli::Cli;
+use crate::network::ping::verificar_host_ativo;
+use crate::network::fingerprint::detectar_servico;
+
+pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
+    let limite_threads = args.threads;
+
+    let partes_porta: Vec<&str> = args.ports.split('-').collect();
+    if partes_porta.len() != 2 {
+        anyhow::bail!("O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
+    }
+
+    let porta_inicial: u16 = partes_porta[0].parse()
+        .context("Falha ao interpretar a porta inicial. Use números válidos.")?;
+
+    let porta_final: u16 = partes_porta[1].parse()
+        .context("Falha ao interpretar a porta final. Use números válidos.")?;
+
+    if porta_inicial > porta_final {
+        anyhow::bail!("A porta inicial não pode ser maior que a porta final!");
+    }
+
+    let mut lista_ips: Vec<IpAddr> = Vec::new();
+    if let Ok(rede) = IpNet::from_str(&args.target) {
+        for ip in rede.hosts() {
+            lista_ips.push(ip);
+        }
+    } else {
+        let ip_unico = IpAddr::from_str(&args.target)
+            .context("Alvo inválido! Especifique um IP válido ou bloco CIDR.")?;
+        lista_ips.push(ip_unico);
+    }
+
+    let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
+
+    println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
+    println!("{} {}", "Alvo especificado:".cyan(), args.target);
+    println!("{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
+    println!("{} {} até {}", "Intervalo de portas:".cyan(), porta_inicial, porta_final);
+    println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
+
+    let semaforo_ping = Arc::new(Semaphore::new(64));
+    let ips_ativos_compartilhados = Arc::new(Mutex::new(Vec::new()));
+    let mut tarefas_ping = vec![];
+
+    let spinner_hosts = ProgressBar::new_spinner();
+    spinner_hosts.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .unwrap(),
+    );
+    spinner_hosts.set_message("Mapeando hosts ativos na rede em paralelo...".bright_black().to_string());
+    spinner_hosts.enable_steady_tick(Duration::from_millis(100));
+
+    let args_proprio: Cli = (*args).clone();
+    let args_compartilhado = Arc::new(args_proprio);
+
+    for ip in lista_ips {
+        let sem = Arc::clone(&semaforo_ping);
+        let ativos_clone = Arc::clone(&ips_ativos_compartilhados);
+        let ip_str = ip.to_string();
+        let timeout_ms = args_compartilhado.timeout;
+
+        tarefas_ping.push(tokio::spawn(async move {
+            if let Ok(_guarda) = sem.acquire().await {
+                if verificar_host_ativo(&ip_str, timeout_ms).await {
+                    let mut ativos = ativos_clone.lock().await;
+                    ativos.push(ip_str);
+                }
+            }
+        }));
+    }
+
+    for t in tarefas_ping { let _ = t.await; }
+
+    let ips_ativos = {
+        let guard = ips_ativos_compartilhados.lock().await;
+        guard.clone()
+    };
+
+    spinner_hosts.finish_and_clear();
+    println!("🔍 Mapeamento concluído: {} hosts encontrados.", ips_ativos.len().to_string().green().bold());
+
+    if ips_ativos.is_empty() {
+        println!("{}", "Nenhum dispositivo online encontrado. Abortando scan.".yellow());
+        return Ok(Vec::new());
+    }
+
+    let total_portas_por_ip = porta_final - porta_inicial + 1;
+    let total_tarefas_globais = (ips_ativos.len() * total_portas_por_ip as usize) as u64;
+
+    let barra = ProgressBar::new(total_tarefas_globais);
+    barra.set_style(
+       ProgressStyle::default_bar()
+          .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} portas ({eta})")
+          .unwrap()
+          .progress_chars("#>-"),
+    );
+
+    let barra_compartilhada = Arc::new(barra);
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
+    let rx_compartilhado = Arc::new(Mutex::new(rx));
+
+    let mut lista_workers = vec![];
+
+    for _ in 0..limite_threads {
+        let rx_clone = Arc::clone(&rx_compartilhado);
+        let lista_resultados = Arc::clone(&resultados_compartilhados);
+        let pb = Arc::clone(&barra_compartilhada);
+        let args_worker_clone = Arc::clone(&args_compartilhado);
+
+        let worker = tokio::spawn(async move {
+            while let Some(trabalho) = {
+                let mut guard = rx_clone.lock().await;
+                guard.recv().await
+            } {
+                let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
+                
+                let mut conectado = false;
+                let mut fluxo_final = None;
+
+                for tentativa in 0..args_worker_clone.retries {
+                    if let Ok(Ok(fluxo)) = timeout(
+                        Duration::from_millis(args_worker_clone.timeout), 
+                        TcpStream::connect(&endereco)
+                    ).await {
+                        conectado = true;
+                        fluxo_final = Some(fluxo);
+                        break;
+                    }
+                    if tentativa + 1 < args_worker_clone.retries {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+
+                if conectado {
+                    let mut fluxo = fluxo_final.unwrap();
+                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo).await;
+
+                    pb.suspend(|| {
+                        let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
+                        println!("{}", alerta.green().bold());
+
+                        if let Some(vuln) = crate::models::checar_vulnerabilidades(&servico_detectado) {
+                            let msg_vuln = format!(
+                                "    ⚠️  [PERIGO - {}] {} -> {}",
+                                vuln.severidade, vuln.cve, vuln.descricao
+                            );
+                            if vuln.severidade == "CRÍTICA" {
+                                println!("{}", msg_vuln.red().bold().blink());
+                            } else {
+                                println!("{}", msg_vuln.yellow().bold());
+                            }
+                        }
+                    });
+
+                    let mut dados = lista_resultados.lock().await;
+                    dados.push(ResultadoPorta {
+                        ip: trabalho.ip,
+                        porta: trabalho.porta,
+                        status: "Aberta".to_string(),
+                        servico: servico_detectado,
+                    });
+                }
+                pb.inc(1);
+            }
+        });
+
+        lista_workers.push(worker);
+    }
+
+    for ip in ips_ativos {
+        for porta in porta_inicial..=porta_final {
+            let trabajo = TrabalhoScan { ip: ip.clone(), porta };
+            let _ = tx.send(trabajo).await;
+        }
+    }
+
+    drop(tx);
+
+    for w in lista_workers { let _ = w.await; }
+
+    barra_compartilhada.finish_and_clear();
+
+    let dados_finais = resultados_compartilhados.lock().await;
+    Ok(dados_finais.clone())
+}
+

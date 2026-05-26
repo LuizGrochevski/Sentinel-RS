@@ -1,36 +1,11 @@
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::Semaphore;
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use std::net::IpAddr;
-use std::str::FromStr;
-use ipnet::IpNet;
-use colored::*;
-use indicatif::{ProgressBar, ProgressStyle};
-use anyhow::{Context, Result};
-
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 use rustls_pki_types::ServerName;
-
-use crate::models::{ResultadoPorta, TrabalhoScan};
-use crate::cli::Cli;
-
-pub async fn verificar_host_ativo(ip: &str) -> bool {
-    let portas_teste = vec![80, 443, 22];
-
-    for porta in portas_teste {
-        let endereco = format!("{}:{}", ip, porta);
-        if let Ok(resultado_conexao) = timeout(Duration::from_millis(800), TcpStream::connect(&endereco)).await {
-            if resultado_conexao.is_ok() {
-                return true;
-            }
-        }
-    }
-    false
-}
+use std::sync::Arc;
+use anyhow::Result;
 
 fn nome_padrao_porta(porta: u16) -> String {
     match porta {
@@ -113,7 +88,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
             }
             "SSH (Sem Banner)".to_string()
         }
-        
+
         25 => {
             if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
@@ -145,9 +120,9 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
             let conector = TlsConnector::from(Arc::new(config));
 
             if let Ok(nome_servidor) = ServerName::try_from(ip) {
-                let nome_estatico: ServerName<'static> = nome_servidor.to_owned();         
+                let nome_estatico: ServerName<'static> = nome_servidor.to_owned();
                 if let Ok(Ok(mut fluxo_tls)) = timeout(Duration::from_secs(2), conector.connect(nome_estatico, fluxo)).await {
-                    
+
                     let requisicao = format!(
                         "HEAD / HTTP/1.1\r\n\
                          Host: {}\r\n\
@@ -160,9 +135,8 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                         if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo_tls.read(&mut buffer)).await {
                             if bytes_lidos > 0 {
                                 let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                                
                                 let status_line = resposta.lines().next().unwrap_or("").trim();
-                                
+
                                 let mut banner_servidor = String::new();
                                 for linha in resposta.lines() {
                                     if linha.to_lowercase().starts_with("server:") {
@@ -213,7 +187,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
             }
             "Redis (Provável)".to_string()
         }
-        
+
         _ => {
             let requisicao = format!(
                 "HEAD / HTTP/1.1\r\n\
@@ -227,8 +201,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                     if bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                         let primeira_linha = banner.lines().next().unwrap_or("").trim();
-                        
-                        // Se a primeira linha parecer HTTP (ex: HTTP/1.1 200 OK), faz o parse do Server header
+
                         if primeira_linha.to_uppercase().starts_with("HTTP/") {
                             let mut banner_servidor = String::new();
                             for linha in banner.lines() {
@@ -242,8 +215,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                             }
                             return format!("HTTP/Serviço Web ({})", primeira_linha);
                         }
-                        
-                        // Se não for HTTP mas retornou alguma string solta, joga a primeira linha como banner
+
                         if !primeira_linha.is_empty() {
                             return primeira_linha.to_string();
                         }
@@ -255,165 +227,3 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
     }
 }
 
-pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
-    let limite_threads = args.threads;
-
-    let partes_porta: Vec<&str> = args.ports.split('-').collect();
-    if partes_porta.len() != 2 {
-        anyhow::bail!("O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
-    }
-
-    let porta_inicial: u16 = partes_porta[0].parse()
-        .context("Falha ao interpretar a porta inicial. Use números válidos.")?;
-        
-    let porta_final: u16 = partes_porta[1].parse()
-        .context("Falha ao interpretar a porta final. Use números válidos.")?;
-
-    if porta_inicial > porta_final {
-        anyhow::bail!("A porta inicial não pode ser maior que a porta final!");
-    }
-
-    let mut lista_ips: Vec<IpAddr> = Vec::new();
-    if let Ok(rede) = IpNet::from_str(&args.target) {
-        for ip in rede.hosts() {
-            lista_ips.push(ip);
-        }
-    } else {
-        let ip_unico = IpAddr::from_str(&args.target)
-            .context("Alvo inválido! Especifique um IP válido ou bloco CIDR.")?;
-        lista_ips.push(ip_unico);
-    }
-
-    let _semaforo = Arc::new(Semaphore::new(limite_threads));
-    let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
-
-    println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
-    println!("{} {}", "Alvo especificado:".cyan(), args.target);
-    println!("{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
-    println!("{} {} até {}", "Intervalo de portas:".cyan(), porta_inicial, porta_final);
-    println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
-
-    let semaforo_ping = Arc::new(Semaphore::new(64));
-    let ips_ativos_compartilhados = Arc::new(Mutex::new(Vec::new()));
-    let mut tarefas_ping = vec![];
-
-    let spinner_hosts = ProgressBar::new_spinner();
-    spinner_hosts.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg}")
-            .unwrap(),
-    );
-    spinner_hosts.set_message("Mapeando hosts ativos na rede em paralelo...".bright_black().to_string());
-    spinner_hosts.enable_steady_tick(Duration::from_millis(100));
-
-    for ip in lista_ips {
-        let sem = Arc::clone(&semaforo_ping);
-        let ativos_clone = Arc::clone(&ips_ativos_compartilhados);
-        let ip_str = ip.to_string();
-
-        tarefas_ping.push(tokio::spawn(async move {
-            if let Ok(_guarda) = sem.acquire().await {
-                if verificar_host_ativo(&ip_str).await {
-                    let mut ativos = ativos_clone.lock().await;
-                    ativos.push(ip_str);
-                }
-            }
-        }));
-    }
-
-    for t in tarefas_ping { let _ = t.await; }
-
-    let ips_ativos = {
-        let guard = ips_ativos_compartilhados.lock().await;
-        guard.clone()
-    };
-
-    spinner_hosts.finish_and_clear();
-    println!("🔍 Mapeamento concluído: {} hosts encontrados.", ips_ativos.len().to_string().green().bold());
-
-    if ips_ativos.is_empty() {
-        println!("{}", "Nenhum dispositivo online encontrado. Abortando scan.".yellow());
-        return Ok(Vec::new());
-    } 
-
-    let total_portas_por_ip = porta_final - porta_inicial + 1;
-    let total_tarefas_globais = (ips_ativos.len() * total_portas_por_ip as usize) as u64;
-
-    let barra = ProgressBar::new(total_tarefas_globais);
-    barra.set_style(
-       ProgressStyle::default_bar()
-          .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} portas ({eta})")
-          .unwrap()
-          .progress_chars("#>-"),
-    );
-
-    let barra_compartilhada = Arc::new(barra);
-
-    let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
-    let rx_compartilhado = Arc::new(Mutex::new(rx));
-
-    let mut lista_workers = vec![];
-
-       for _ in 0..limite_threads {
-        let rx_clone = Arc::clone(&rx_compartilhado);
-        let lista_resultados = Arc::clone(&resultados_compartilhados);
-        let pb = Arc::clone(&barra_compartilhada);
-
-        let worker = tokio::spawn(async move {
-            while let Some(trabalho) = {
-                let mut guard = rx_clone.lock().await;
-                guard.recv().await
-            } {
-                let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
-
-                if let Ok(Ok(mut fluxo)) = timeout(Duration::from_secs(1), TcpStream::connect(&endereco)).await {
-                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo).await;
-
-                        pb.suspend(|| {
-                            let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
-                            println!("{}", alerta.green().bold());
-
-                            if let Some(vuln) = crate::models::checar_vulnerabilidades(&servico_detectado) {
-                                let msg_vuln = format!(
-                                "    ⚠️  [PERIGO - {}] {} -> {}", 
-                                vuln.severidade, vuln.cve, vuln.descricao);
-                            if vuln.severidade == "CRÍTICA" {
-                                println!("{}", msg_vuln.red().bold().blink());
-                            } else {
-                                println!("{}", msg_vuln.yellow().bold());
-                            }
-                        }
-                    });
-
-
-                    let mut dados = lista_resultados.lock().await;
-                    dados.push(ResultadoPorta {
-                        ip: trabalho.ip,
-                        porta: trabalho.porta,
-                        status: "Aberta".to_string(),
-                        servico: servico_detectado,
-                    });
-                }
-                pb.inc(1);
-            }
-        });
-
-        lista_workers.push(worker);
-    }
-    
-    for ip in ips_ativos {
-        for porta in porta_inicial..=porta_final {
-            let trabalho = TrabalhoScan { ip: ip.clone(), porta };
-            let _ = tx.send(trabalho).await;
-        }
-    }
-    
-    drop(tx);
-
-    for w in lista_workers { let _ = w.await; }
-
-    barra_compartilhada.finish_and_clear();
-
-    let dados_finais = resultados_compartilhados.lock().await;
-    Ok(dados_finais.clone())
-}

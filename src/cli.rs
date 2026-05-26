@@ -1,6 +1,6 @@
 use clap::Parser;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(
     name = "sentinel-rs",
     author = "Luiz Grochevski",
@@ -16,4 +16,11 @@ pub struct Cli {
 
     #[arg(short = 't', long = "threads", default_value = "100")]
     pub threads: usize,
+
+    #[arg(long, default_value_t = 1000)]
+    pub timeout: u64,
+
+    #[arg(long, default_value_t = 1)]
+    pub retries: usize,
+
 }
