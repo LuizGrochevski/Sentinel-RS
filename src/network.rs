@@ -11,7 +11,11 @@ use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use anyhow::{Context, Result};
 
-use crate::reports::ResultadoPorta;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+use tokio_rustls::TlsConnector;
+use rustls_pki_types::ServerName;
+
+use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::cli::Cli;
 
 pub async fn verificar_host_ativo(ip: &str) -> bool {
@@ -41,8 +45,49 @@ fn nome_padrao_porta(porta: u16) -> String {
     }
 }
 
+#[derive(Debug)]
+struct VerificadorInseguro;
+impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorInseguro {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls_pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls_pki_types::CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls_pki_types::UnixTime,
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
+        vec![
+            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            tokio_rustls::rustls::SignatureScheme::ED25519,
+        ]
+    }
+}
+
 pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String {
-    let mut buffer = [0; 128];
+    let mut buffer = [0; 256];
 
     match porta {
         22 => {
@@ -58,22 +103,58 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
         53 => "DNS (TCP)".to_string(),
 
         443 => {
-            let requisicao = format!(
-                "HEAD / HTTP/1.1\r\n\
-                 Host: {}\r\n\
-                 User-Agent: SentinelRS/1.0\r\n\
-                 Accept: text/html,application/xhtml+xml\r\n\
-                 Connection: close\r\n\r\n",
-                ip
-            );
-            if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
-                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
-                    if bytes_lidos > 0 {
-                        return "HTTPS (Possível)".to_string();
+            let mut raizes = RootCertStore::empty();
+            for ancora in webpki_roots::TLS_SERVER_ROOTS {
+                let certificado = rustls_pki_types::CertificateDer::from(ancora.subject.as_ref());
+                let _ = raizes.add(certificado);
+            }
+            let mut config = ClientConfig::builder()
+                .with_root_certificates(raizes)
+                .with_no_client_auth();
+
+            config.dangerous().set_certificate_verifier(Arc::new(VerificadorInseguro));
+
+            let conector = TlsConnector::from(Arc::new(config));
+
+            if let Ok(nome_servidor) = ServerName::try_from(ip) {
+                let nome_estatico: ServerName<'static> = nome_servidor.to_owned();         
+                if let Ok(Ok(mut fluxo_tls)) = timeout(Duration::from_secs(2), conector.connect(nome_estatico, fluxo)).await {
+                    
+                    let requisicao = format!(
+                        "HEAD / HTTP/1.1\r\n\
+                         Host: {}\r\n\
+                         User-Agent: SentinelRS/1.0\r\n\
+                         Connection: close\r\n\r\n",
+                        ip
+                    );
+
+                    if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok() {
+                        if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo_tls.read(&mut buffer)).await {
+                            if bytes_lidos > 0 {
+                                let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                                
+                                let status_line = resposta.lines().next().unwrap_or("").trim();
+                                
+                                let mut banner_servidor = String::new();
+                                for linha in resposta.lines() {
+                                    if linha.to_lowercase().starts_with("server:") {
+                                        banner_servidor = linha["server:".len()..].trim().to_string();
+                                        break;
+                                    }
+                                }
+
+                                if !banner_servidor.is_empty() {
+                                    return format!("HTTPS ({}) -> Servidor: {}", status_line, banner_servidor);
+                                } else if !status_line.is_empty() {
+                                    return format!("HTTPS ({})", status_line);
+                                }
+                            }
+                        }
                     }
+                    return "HTTPS (Conexão Segura Estabelecida)".to_string();
                 }
             }
-            "HTTPS".to_string()
+            "HTTPS (Falha no Handshake TLS)".to_string()
         }
 
         5432 => "PostgreSQL".to_string(),
@@ -223,11 +304,6 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
     );
 
     let barra_compartilhada = Arc::new(barra);
-
-    struct TrabalhoScan {
-        ip: String,
-        porta: u16,
-    }
 
     let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
     let rx_compartilhado = Arc::new(Mutex::new(rx));

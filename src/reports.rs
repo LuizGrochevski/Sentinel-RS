@@ -2,14 +2,7 @@ use std::fs::File;
 use std::io::Write as IoWrite;
 use serde::Serialize;
 use colored::*;
-
-#[derive(Serialize, Clone)]
-pub struct ResultadoPorta {
-    pub ip: String,
-    pub porta: u16,
-    pub status: String,
-    pub servico: String,
-}
+use crate::models::ResultadoPorta;
 
 pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
     if let Err(e) = std::fs::create_dir_all("reports") {

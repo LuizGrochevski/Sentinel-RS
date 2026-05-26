@@ -1,6 +1,7 @@
 mod cli;
 mod network;
 mod reports;
+mod models;
 
 use clap::Parser;
 use anyhow::Result;
