@@ -90,6 +90,20 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
     let mut buffer = [0; 256];
 
     match porta {
+        21 => {
+            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                if bytes_lidos > 0 {
+                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                    if resposta.starts_with("220") {
+                        let banner = resposta["220".len()..].trim();
+                        return format!("FTP -> {}", banner.lines().next().unwrap_or(""));
+                    }
+                    return resposta.lines().next().unwrap_or("FTP").trim().to_string();
+                }
+            }
+            "FTP (Sem Banner)".to_string()
+        }
+
         22 => {
             if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
@@ -98,6 +112,20 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                 }
             }
             "SSH (Sem Banner)".to_string()
+        }
+        
+        25 => {
+            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                if bytes_lidos > 0 {
+                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                    if resposta.starts_with("220") {
+                        let banner = resposta["220".len()..].trim();
+                        return format!("SMTP -> {}", banner.lines().next().unwrap_or(""));
+                    }
+                    return resposta.lines().next().unwrap_or("SMTP").trim().to_string();
+                }
+            }
+            "SMTP (Sem Banner)".to_string()
         }
 
         53 => "DNS (TCP)".to_string(),
@@ -185,13 +213,12 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
             }
             "Redis (Provável)".to_string()
         }
-
+        
         _ => {
             let requisicao = format!(
                 "HEAD / HTTP/1.1\r\n\
                  Host: {}\r\n\
-                 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n\
-                 Accept: text/html,application/xhtml+xml\r\n\
+                 User-Agent: SentinelRS/1.0\r\n\
                  Connection: close\r\n\r\n",
                 ip
             );
@@ -200,6 +227,23 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                     if bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                         let primeira_linha = banner.lines().next().unwrap_or("").trim();
+                        
+                        // Se a primeira linha parecer HTTP (ex: HTTP/1.1 200 OK), faz o parse do Server header
+                        if primeira_linha.to_uppercase().starts_with("HTTP/") {
+                            let mut banner_servidor = String::new();
+                            for linha in banner.lines() {
+                                if linha.to_lowercase().starts_with("server:") {
+                                    banner_servidor = linha["server:".len()..].trim().to_string();
+                                    break;
+                                }
+                            }
+                            if !banner_servidor.is_empty() {
+                                return format!("HTTP/Serviço Web ({}) -> Servidor: {}", primeira_linha, banner_servidor);
+                            }
+                            return format!("HTTP/Serviço Web ({})", primeira_linha);
+                        }
+                        
+                        // Se não for HTTP mas retornou alguma string solta, joga a primeira linha como banner
                         if !primeira_linha.is_empty() {
                             return primeira_linha.to_string();
                         }
