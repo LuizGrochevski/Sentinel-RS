@@ -369,10 +369,22 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
                 if let Ok(Ok(mut fluxo)) = timeout(Duration::from_secs(1), TcpStream::connect(&endereco)).await {
                     let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo).await;
 
-                    pb.suspend(|| {
-                        let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
-                        println!("{}", alerta.green().bold());
+                        pb.suspend(|| {
+                            let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
+                            println!("{}", alerta.green().bold());
+
+                            if let Some(vuln) = crate::models::checar_vulnerabilidades(&servico_detectado) {
+                                let msg_vuln = format!(
+                                "    ⚠️  [PERIGO - {}] {} -> {}", 
+                                vuln.severidade, vuln.cve, vuln.descricao);
+                            if vuln.severidade == "CRÍTICA" {
+                                println!("{}", msg_vuln.red().bold().blink());
+                            } else {
+                                println!("{}", msg_vuln.yellow().bold());
+                            }
+                        }
                     });
+
 
                     let mut dados = lista_resultados.lock().await;
                     dados.push(ResultadoPorta {
