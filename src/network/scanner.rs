@@ -261,9 +261,9 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
     barra_compartilhada.finish_and_clear();
 
-    let dados_finais = {
-        let guard = resultados_compartilhados.lock().await;
-        guard.clone()
+    let dados_finais = match Arc::try_unwrap(resultados_compartilhados) {
+        Ok(mutex) => mutex.into_inner(),
+        Err(arc) => arc.lock().await.clone(),
     };
 
     Ok(dados_finais)

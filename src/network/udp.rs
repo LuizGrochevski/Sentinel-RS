@@ -49,7 +49,7 @@ pub async fn escanear_porta_udp(ip: &str, porta: u16, timeout_ms: u64) -> String
     let mut buffer = [0; 512];
     match timeout(Duration::from_millis(timeout_ms), socket.recv(&mut buffer)).await {
         Ok(Ok(bytes_lidos)) => {
-            debug!("Resposta recebida na porta UDP {}: {} bytes", porta, bytes_lidos);
+            debug!("Resposta direta recebida na porta UDP {}: {} bytes", porta, bytes_lidos);
             match porta {
                 53 => "DNS Server (Ativo)".to_string(),
                 123 => "NTP Server (Ativo)".to_string(),
@@ -65,9 +65,26 @@ pub async fn escanear_porta_udp(ip: &str, porta: u16, timeout_ms: u64) -> String
         }
         Err(_) => {
             if porta == 53 || porta == 123 {
-                "Aberta | Filtrada (Sem resposta ao Probe)".to_string()
-            } else {
-                "Aberta | Filtrada".to_string()
+                return "Aberta | Filtrada (Sem resposta ao Probe)".to_string();
+            }
+
+            let payload_generico = b"HELP\r\n\r\n";
+            let _ = socket.send(payload_generico).await;
+
+            let mut buffer_banner = [0; 256];
+            match timeout(Duration::from_millis(std::cmp::max(timeout_ms / 2, 10)), socket.recv(&mut buffer_banner)).await {
+                Ok(Ok(bytes_lidos)) if bytes_lidos > 0 => {
+                    let texto = String::from_utf8_lossy(&buffer_banner[..bytes_lidos]);
+                    let banner_limpo = texto.lines().next().unwrap_or("").trim();
+                    if !banner_limpo.is_empty() {
+                        debug!("Banner UDP capturado na porta {}: {}", porta, banner_limpo);
+                        return format!("Aberta (UDP Banner: {})", banner_limpo);
+                    }
+                    "Aberta (Resposta Capturada)".to_string()
+                }
+                _ => {
+                    "Aberta | Filtrada".to_string()
+                }
             }
         }
     }
