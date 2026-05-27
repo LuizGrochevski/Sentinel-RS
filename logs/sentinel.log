@@ -1,0 +1,13 @@
+2026-05-27T17:01:38.957964Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
+2026-05-27T17:01:40.212401Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:75
+2026-05-27T17:01:40.214938Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:76
+2026-05-27T17:01:40.217308Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:77
+2026-05-27T17:01:40.219620Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:78
+2026-05-27T17:01:40.219783Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:79
+2026-05-27T17:01:40.223965Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:80
+2026-05-27T17:01:40.226388Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:81
+2026-05-27T17:01:40.228794Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:82
+2026-05-27T17:01:40.228904Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:83
+2026-05-27T17:01:40.232869Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:84
+2026-05-27T17:01:40.234730Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:85
+2026-05-27T17:01:40.288019Z  WARN sentinel_rs: Nenhum resultado capturado para exportar.

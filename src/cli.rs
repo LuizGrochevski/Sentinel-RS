@@ -23,4 +23,6 @@ pub struct Cli {
     #[arg(long, default_value_t = 1)]
     pub retries: usize,
 
+    #[arg(short, long)]
+    pub verbose: bool,
 }

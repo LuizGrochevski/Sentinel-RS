@@ -9,6 +9,7 @@ use ipnet::IpNet;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use anyhow::{Context, Result};
+use tracing::{info, warn, error, debug};
 
 use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::cli::Cli;
@@ -95,7 +96,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
     println!("🔍 Mapeamento concluído: {} hosts encontrados.", ips_ativos.len().to_string().green().bold());
 
     if ips_ativos.is_empty() {
-        println!("{}", "Nenhum dispositivo online encontrado. Abortando scan.".yellow());
+        warn!("Nenhum dispositivo online encontrado. Abortando scan.");
         return Ok(Vec::new());
     }
 
@@ -136,6 +137,8 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                 guard.recv().await
             } {
                 let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
+
+                debug!("Worker processando alvo: {}", endereco);
 
                 let mut conectado = false;
                 let mut fluxo_final = None;
