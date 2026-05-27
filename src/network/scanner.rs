@@ -19,19 +19,37 @@ use crate::network::fingerprint::detectar_servico;
 pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -> Result<Vec<ResultadoPorta>> {
     let limite_threads = args.threads;
 
-    let partes_porta: Vec<&str> = args.ports.split('-').collect();
-    if partes_porta.len() != 2 {
-        anyhow::bail!("O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
+    let mut lista_portas: Vec<u16> = Vec::new();
+
+    for parte in args.ports.split(',') {
+        let parte_limpa = parte.trim();
+        if parte_limpa.is_empty() { continue; }
+
+        if parte_limpa.contains('-') {
+            let intervalo: Vec<&str> = parte_limpa.split('-').collect();
+            if intervalo.len() != 2 {
+                anyhow::bail!("Formato de intervalo de portas inválido: {}", parte_limpa);
+            }
+            let inicio: u16 = intervalo[0].parse().context("Porta inicial inválida no intervalo")?;
+            let fim: u16 = intervalo[1].parse().context("Porta final inválida no intervalo")?;
+            
+            if inicio > fim {
+                anyhow::bail!("A porta inicial {} não pode ser maior que a final {}!", inicio, fim);
+            }
+            for p in inicio..=fim {
+                lista_portas.push(p);
+            }
+        } else {
+            let porta_unica: u16 = parte_limpa.parse().context("Número de porta inválido")?;
+            lista_portas.push(porta_unica);
+        }
     }
 
-    let porta_inicial: u16 = partes_porta[0].parse()
-        .context("Falha ao interpretar a porta inicial. Use números válidos.")?;
+    lista_portas.sort_unstable();
+    lista_portas.dedup();
 
-    let porta_final: u16 = partes_porta[1].parse()
-        .context("Falha ao interpretar a porta final. Use números válidos.")?;
-
-    if porta_inicial > porta_final {
-        anyhow::bail!("A porta inicial não pode ser maior que a porta final!");
+    if lista_portas.is_empty() {
+        anyhow::bail!("Nenhuma porta válida foi especificada!");
     }
 
     let mut lista_ips: Vec<IpAddr> = Vec::new();
@@ -53,7 +71,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
     println!("{} {}", "Protocolo:".cyan(), protocolo_texto.yellow());
     println!("{} {}", "Alvo especificado:".cyan(), args.target);
     println!("{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
-    println!("{} {} até {}", "Intervalo de portas:".cyan(), porta_inicial, porta_final);
+    println!("{} {}", "Total de portas por host:".cyan(), lista_portas.len().to_string().yellow());
     println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
 
     let semaforo_ping = Arc::new(Semaphore::new(64));
@@ -103,8 +121,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         return Ok(Vec::new());
     }
 
-    let total_portas_por_ip = porta_final - porta_inicial + 1;
-    let total_tarefas_globais = (ips_ativos.len() * total_portas_por_ip as usize) as u64;
+    let total_tarefas_globais = (ips_ativos.len() * lista_portas.len()) as u64;
 
     let barra = ProgressBar::new(total_tarefas_globais);
     barra.set_style(
@@ -230,8 +247,8 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
     }
 
     for ip in ips_ativos {
-        for porta in porta_inicial..=porta_final {
-            let trabalho = TrabalhoScan { ip: ip.clone(), porta };
+        for porta in &lista_portas {
+            let trabalho = TrabalhoScan { ip: ip.clone(), porta: *porta };
             if tx.send(trabalho).await.is_err() {
                 break;
             }

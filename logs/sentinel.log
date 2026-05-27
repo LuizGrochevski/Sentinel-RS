@@ -1,14 +1,3 @@
-2026-05-27T19:35:41.224142Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
-2026-05-27T19:35:41.232121Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:50
-2026-05-27T19:35:41.234104Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:51
-2026-05-27T19:35:41.235706Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:52
-2026-05-27T19:35:41.237341Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:53
-2026-05-27T19:35:41.237377Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:54
-2026-05-27T19:35:41.238834Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:55
-2026-05-27T19:35:41.282946Z DEBUG sentinel_rs::network::udp: Porta UDP 51 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.284707Z DEBUG sentinel_rs::network::udp: Porta UDP 50 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.284830Z DEBUG sentinel_rs::network::udp: Porta UDP 55 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.285717Z DEBUG sentinel_rs::network::udp: Porta UDP 52 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.284990Z DEBUG sentinel_rs::network::udp: Porta UDP 53 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.286595Z DEBUG sentinel_rs::network::udp: Porta UDP 54 fechada (ICMP Connection Refused)
-2026-05-27T19:35:41.288799Z  WARN sentinel_rs: Nenhum resultado capturado para exportar.
+2026-05-27T20:08:49.324864Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
+2026-05-27T20:08:49.582596Z  WARN sentinel_rs::network::scanner: Nenhum dispositivo online encontrado. Abortando scan.
+2026-05-27T20:08:49.583631Z  WARN sentinel_rs: Nenhum resultado capturado para exportar.
