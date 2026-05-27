@@ -15,9 +15,9 @@ use crate::cli::Cli;
 use crate::network::ping::verificar_host_ativo;
 use crate::network::fingerprint::detectar_servico;
 
-pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
+pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -> Result<Vec<ResultadoPorta>> {
     let limite_threads = args.threads;
-
+    
     let partes_porta: Vec<&str> = args.ports.split('-').collect();
     if partes_porta.len() != 2 {
         anyhow::bail!("O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
@@ -115,6 +115,13 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
     let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
     let rx_compartilhado = Arc::new(Mutex::new(rx));
 
+   let rx_monitor = Arc::clone(&rx_compartilhado);
+    tokio::spawn(async move {
+        cancelamento.notified().await;
+        let mut guard = rx_monitor.lock().await;
+        guard.close();
+    });
+
     let mut lista_workers = vec![];
 
     for _ in 0..limite_threads {
@@ -129,13 +136,13 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
                 guard.recv().await
             } {
                 let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
-                
+
                 let mut conectado = false;
                 let mut fluxo_final = None;
 
                 for tentativa in 0..args_worker_clone.retries {
                     if let Ok(Ok(fluxo)) = timeout(
-                        Duration::from_millis(args_worker_clone.timeout), 
+                        Duration::from_millis(args_worker_clone.timeout),
                         TcpStream::connect(&endereco)
                     ).await {
                         conectado = true;
@@ -149,7 +156,7 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
 
                 if conectado {
                     let mut fluxo = fluxo_final.unwrap();
-                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo).await;
+                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo, args_worker_clone.timeout).await;
 
                     pb.suspend(|| {
                         let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
@@ -185,8 +192,10 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
 
     for ip in ips_ativos {
         for porta in porta_inicial..=porta_final {
-            let trabajo = TrabalhoScan { ip: ip.clone(), porta };
-            let _ = tx.send(trabajo).await;
+            let trabalho = TrabalhoScan { ip: ip.clone(), porta };
+            if tx.send(trabalho).await.is_err() {
+                break;
+            }
         }
     }
 
@@ -196,7 +205,10 @@ pub async fn executar_scan(args: &Cli) -> Result<Vec<ResultadoPorta>> {
 
     barra_compartilhada.finish_and_clear();
 
-    let dados_finais = resultados_compartilhados.lock().await;
+    let dados_finais = {
+        let guard = resultados_compartilhados.lock().await;
+        guard.clone()
+    };
+
     Ok(dados_finais.clone())
 }
-

@@ -17,7 +17,7 @@ pub struct Cli {
     #[arg(short = 't', long = "threads", default_value = "100")]
     pub threads: usize,
 
-    #[arg(long, default_value_t = 1000)]
+    #[arg(long, default_value_t = 100)]
     pub timeout: u64,
 
     #[arg(long, default_value_t = 1)]

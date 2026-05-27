@@ -61,12 +61,13 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
     }
 }
 
-pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> String {
+pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeout_ms: u64) -> String {
     let mut buffer = [0; 256];
+    let d_timeout = Duration::from_millis(timeout_ms);
 
     match porta {
         21 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
@@ -80,7 +81,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
         }
 
         22 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
                     let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     return banner.lines().next().unwrap_or("SSH").trim().to_string();
@@ -90,7 +91,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
         }
 
         25 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
@@ -121,7 +122,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
 
             if let Ok(nome_servidor) = ServerName::try_from(ip) {
                 let nome_estatico: ServerName<'static> = nome_servidor.to_owned();
-                if let Ok(Ok(mut fluxo_tls)) = timeout(Duration::from_secs(2), conector.connect(nome_estatico, fluxo)).await {
+                if let Ok(Ok(mut fluxo_tls)) = timeout(d_timeout, conector.connect(nome_estatico, fluxo)).await {
 
                     let requisicao = format!(
                         "HEAD / HTTP/1.1\r\n\
@@ -132,7 +133,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                     );
 
                     if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok() {
-                        if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo_tls.read(&mut buffer)).await {
+                        if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo_tls.read(&mut buffer)).await {
                             if bytes_lidos > 0 {
                                 let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                                 let status_line = resposta.lines().next().unwrap_or("").trim();
@@ -162,7 +163,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
         5432 => "PostgreSQL".to_string(),
 
         3306 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 5 {
                     let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
                     if resposta.contains("mysql") || resposta.contains("MariaDB") || !resposta.is_empty() {
@@ -178,7 +179,7 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
         6379 => {
             let probe_redis = "PING\r\n";
             if fluxo.write_all(probe_redis.as_bytes()).await.is_ok() {
-                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(1), fluxo.read(&mut buffer)).await {
+                if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.contains("+PONG") {
                         return "Redis Cache Server (Ativo)".to_string();
@@ -197,7 +198,8 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream) -> St
                 ip
             );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
-                if let Ok(Ok(bytes_lidos)) = timeout(Duration::from_secs(2), fluxo.read(&mut buffer)).await {
+                let timeout_leitura = Duration::from_millis(std::cmp::min(timeout_ms, 100));
+                if let Ok(Ok(bytes_lidos)) = timeout(timeout_leitura, fluxo.read(&mut buffer)).await {
                     if bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                         let primeira_linha = banner.lines().next().unwrap_or("").trim();
