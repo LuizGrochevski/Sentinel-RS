@@ -1,13 +1,19 @@
-2026-05-27T17:01:38.957964Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
-2026-05-27T17:01:40.212401Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:75
-2026-05-27T17:01:40.214938Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:76
-2026-05-27T17:01:40.217308Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:77
-2026-05-27T17:01:40.219620Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:78
-2026-05-27T17:01:40.219783Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:79
-2026-05-27T17:01:40.223965Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:80
-2026-05-27T17:01:40.226388Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:81
-2026-05-27T17:01:40.228794Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:82
-2026-05-27T17:01:40.228904Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:83
-2026-05-27T17:01:40.232869Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:84
-2026-05-27T17:01:40.234730Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:85
-2026-05-27T17:01:40.288019Z  WARN sentinel_rs: Nenhum resultado capturado para exportar.
+2026-05-27T18:35:12.845710Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
+2026-05-27T18:35:12.966362Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:50
+2026-05-27T18:35:12.968384Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:51
+2026-05-27T18:35:12.969372Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:52
+2026-05-27T18:35:12.970331Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:53
+2026-05-27T18:35:12.970426Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:54
+2026-05-27T18:35:12.971584Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:55
+2026-05-27T18:35:12.972309Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:56
+2026-05-27T18:35:12.972996Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:57
+2026-05-27T18:35:12.973033Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:58
+2026-05-27T18:35:12.974223Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:59
+2026-05-27T18:35:12.974901Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:60
+2026-05-27T18:35:12.975018Z DEBUG sentinel_rs::network::udp: Porta UDP 50 fechada (ICMP Connection Refused)
+2026-05-27T18:35:12.977697Z DEBUG sentinel_rs::network::udp: Porta UDP 51 fechada (ICMP Connection Refused)
+2026-05-27T18:35:12.979217Z DEBUG sentinel_rs::network::udp: Porta UDP 52 fechada (ICMP Connection Refused)
+2026-05-27T18:35:12.984508Z DEBUG sentinel_rs::network::udp: Porta UDP 53 fechada (ICMP Connection Refused)
+2026-05-27T18:35:12.985438Z DEBUG sentinel_rs::network::udp: Porta UDP 54 fechada (ICMP Connection Refused)
+2026-05-27T18:35:12.985840Z DEBUG sentinel_rs::network::udp: Porta UDP 55 fechada (ICMP Connection Refused)
+2026-05-27T18:35:13.127735Z  INFO sentinel_rs: Scan finalizado com sucesso! Passando dados para o motor de relatórios.

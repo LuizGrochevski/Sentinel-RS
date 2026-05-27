@@ -25,4 +25,7 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub verbose: bool,
+
+    #[arg(short,long)]
+    pub udp: bool,
 }

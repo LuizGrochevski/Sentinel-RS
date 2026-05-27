@@ -9,7 +9,7 @@ use ipnet::IpNet;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use anyhow::{Context, Result};
-use tracing::{info, warn, error, debug};
+use tracing::{ warn, debug};
 
 use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::cli::Cli;
@@ -18,7 +18,7 @@ use crate::network::fingerprint::detectar_servico;
 
 pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -> Result<Vec<ResultadoPorta>> {
     let limite_threads = args.threads;
-    
+
     let partes_porta: Vec<&str> = args.ports.split('-').collect();
     if partes_porta.len() != 2 {
         anyhow::bail!("O formato das portas deve ser INICIO-FIM (ex: -p 1-1000)");
@@ -47,7 +47,10 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
     let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
 
+    let protocolo_texto = if args.udp { "UDP (Datagramas)" } else { "TCP (Conexões)" };
+
     println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
+    println!("{} {}", "Protocolo:".cyan(), protocolo_texto.yellow());
     println!("{} {}", "Alvo especificado:".cyan(), args.target);
     println!("{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
     println!("{} {} até {}", "Intervalo de portas:".cyan(), porta_inicial, porta_final);
@@ -116,7 +119,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
     let (tx, rx) = tokio::sync::mpsc::channel::<TrabalhoScan>(10000);
     let rx_compartilhado = Arc::new(Mutex::new(rx));
 
-   let rx_monitor = Arc::clone(&rx_compartilhado);
+    let rx_monitor = Arc::clone(&rx_compartilhado);
     tokio::spawn(async move {
         cancelamento.notified().await;
         let mut guard = rx_monitor.lock().await;
@@ -137,33 +140,66 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                 guard.recv().await
             } {
                 let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
-
                 debug!("Worker processando alvo: {}", endereco);
 
-                let mut conectado = false;
-                let mut fluxo_final = None;
+                let mut servico_detectado = String::new();
+                let mut encontrou = false;
 
-                for tentativa in 0..args_worker_clone.retries {
-                    if let Ok(Ok(fluxo)) = timeout(
-                        Duration::from_millis(args_worker_clone.timeout),
-                        TcpStream::connect(&endereco)
-                    ).await {
-                        conectado = true;
-                        fluxo_final = Some(fluxo);
-                        break;
+                if args_worker_clone.udp {
+                    let resultado_udp = crate::network::udp::escanear_porta_udp(
+                        &trabalho.ip,
+                        trabalho.porta,
+                        args_worker_clone.timeout,
+                    ).await;
+
+                    if resultado_udp != "Fechada" && !resultado_udp.contains("Falha") && !resultado_udp.contains("Erro") {
+                        encontrou = true;
+                        servico_detectado = resultado_udp;
                     }
-                    if tentativa + 1 < args_worker_clone.retries {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                } else {
+                    let mut conectado = false;
+                    let mut fluxo_final = None;
+
+                    for tentativa in 0..args_worker_clone.retries {
+                        if let Ok(Ok(fluxo)) = timeout(
+                            Duration::from_millis(args_worker_clone.timeout),
+                            TcpStream::connect(&endereco)
+                        ).await {
+                            conectado = true;
+                            fluxo_final = Some(fluxo);
+                            break;
+                        }
+                        if tentativa + 1 < args_worker_clone.retries {
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                    }
+
+                    if conectado {
+                        encontrou = true;
+                        let mut fluxo = fluxo_final.unwrap();
+                        servico_detectado = detectar_servico(
+                            trabalho.porta,
+                            &trabalho.ip,
+                            &mut fluxo,
+                            args_worker_clone.timeout,
+                        ).await;
                     }
                 }
 
-                if conectado {
-                    let mut fluxo = fluxo_final.unwrap();
-                    let servico_detectado = detectar_servico(trabalho.porta, &trabalho.ip, &mut fluxo, args_worker_clone.timeout).await;
+                if encontrou {
+                    let protocolo_tag = if args_worker_clone.udp { "UDP" } else { "TCP" };
 
                     pb.suspend(|| {
-                        let alerta = format!("[+] Porta {} ABERTA | Serviço: {}", trabalho.porta, servico_detectado);
-                        println!("{}", alerta.green().bold());
+                        let alerta = format!(
+                            "[+] Porta {}/{} ABERTA | Status/Serviço: {}",
+                            trabalho.porta, protocolo_tag, servico_detectado
+                        );
+
+                        if args_worker_clone.udp {
+                            println!("{}", alerta.magenta().bold());
+                        } else {
+                            println!("{}", alerta.green().bold());
+                        }
 
                         if let Some(vuln) = crate::models::checar_vulnerabilidades(&servico_detectado) {
                             let msg_vuln = format!(
@@ -182,7 +218,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                     dados.push(ResultadoPorta {
                         ip: trabalho.ip,
                         porta: trabalho.porta,
-                        status: "Aberta".to_string(),
+                        status: format!("Aberta ({})", protocolo_tag),
                         servico: servico_detectado,
                     });
                 }
@@ -213,5 +249,6 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         guard.clone()
     };
 
-    Ok(dados_finais.clone())
+    Ok(dados_finais)
 }
+
