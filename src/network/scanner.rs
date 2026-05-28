@@ -106,22 +106,40 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         }));
     }
 
-    for t in tarefas_ping { let _ = t.await; }
+        for t in tarefas_ping { let _ = t.await; }
 
-    let ips_ativos = {
+    let ips_encontrados = {
         let guard = ips_ativos_compartilhados.lock().await;
         guard.clone()
     };
 
-    spinner_hosts.finish_and_clear();
-    println!("🔍 Mapeamento concluído: {} hosts encontrados.", ips_ativos.len().to_string().green().bold());
+    spinner_hosts.set_message("Resolvendo hostnames dos alvos ativos em paralelo...".bright_black().to_string());
 
-    if ips_ativos.is_empty() {
+    let mut tarefas_dns = vec![];
+    for ip in &ips_encontrados {
+        let ip_clone = ip.clone();
+        tarefas_dns.push(tokio::spawn(async move {
+            let ip_com_nome = crate::network::dns::resolver_hostname_reverso(&ip_clone).await;
+            (ip_clone, ip_com_nome)
+        }));
+    }
+
+    let mut mapeamento_hosts_completo = std::collections::HashMap::new();
+    for t in tarefas_dns {
+        if let Ok((_ip_original, ip_com_nome)) = t.await {
+            mapeamento_hosts_completo.insert(_ip_original, ip_com_nome);
+        }
+    }
+
+    spinner_hosts.finish_and_clear();
+    println!("🔍 Mapeamento concluído: {} hosts encontrados.", mapeamento_hosts_completo.len().to_string().green().bold());
+
+    if ips_encontrados.is_empty() {
         warn!("Nenhum dispositivo online encontrado. Abortando scan.");
         return Ok(Vec::new());
     }
 
-    let total_tarefas_globais = (ips_ativos.len() * lista_portas.len()) as u64;
+    let total_tarefas_globais = (ips_encontrados.len() * lista_portas.len()) as u64;
 
     let barra = ProgressBar::new(total_tarefas_globais);
     barra.set_style(
@@ -246,9 +264,9 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         lista_workers.push(worker);
     }
 
-    for ip in ips_ativos {
+    for (_ip_original, ip_com_nome) in mapeamento_hosts_completo {
         for porta in &lista_portas {
-            let trabalho = TrabalhoScan { ip: ip.clone(), porta: *porta };
+            let trabalho = TrabalhoScan { ip: ip_com_nome.clone(), porta: *porta };
             if tx.send(trabalho).await.is_err() {
                 break;
             }

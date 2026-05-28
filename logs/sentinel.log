@@ -1,8 +1,13 @@
-2026-05-27T20:25:41.534243Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
-2026-05-27T20:25:41.564769Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:53
-2026-05-27T20:25:41.566692Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:67
-2026-05-27T20:25:41.568963Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:123
-2026-05-27T20:25:41.571179Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:1900
-2026-05-27T20:25:41.694910Z DEBUG sentinel_rs::network::udp: Porta UDP 53 fechada (ICMP Connection Refused)
-2026-05-27T20:25:41.696136Z DEBUG sentinel_rs::network::udp: Porta UDP 123 fechada (ICMP Connection Refused)
-2026-05-27T20:25:42.028069Z  INFO sentinel_rs: Scan finalizado com sucesso! Passando dados para o motor de relatórios.
+2026-05-28T04:30:35.847417Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
+2026-05-28T04:30:38.419669Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:21
+2026-05-28T04:30:38.423399Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:22
+2026-05-28T04:30:38.426331Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:23
+2026-05-28T04:30:38.426802Z DEBUG sentinel_rs::network::udp: Porta UDP 21 fechada (ICMP Connection Refused)
+2026-05-28T04:30:38.429445Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:53
+2026-05-28T04:30:38.430763Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:80
+2026-05-28T04:30:38.432360Z DEBUG sentinel_rs::network::udp: Porta UDP 22 fechada (ICMP Connection Refused)
+2026-05-28T04:30:38.433390Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:1900
+2026-05-28T04:30:38.433788Z DEBUG sentinel_rs::network::udp: Porta UDP 23 fechada (ICMP Connection Refused)
+2026-05-28T04:30:38.436324Z DEBUG sentinel_rs::network::udp: Porta UDP 53 fechada (ICMP Connection Refused)
+2026-05-28T04:30:38.437047Z DEBUG sentinel_rs::network::udp: Porta UDP 80 fechada (ICMP Connection Refused)
+2026-05-28T04:30:38.743933Z  INFO sentinel_rs: Scan finalizado com sucesso! Passando dados para o motor de relatórios.
