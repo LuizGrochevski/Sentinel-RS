@@ -12,7 +12,7 @@ O projeto foi arquitetado para rodar de forma eficiente inclusive em ambientes m
 - Suporte a ranges e parsing dinâmico de portas
 - Scanner CIDR para sub-redes inteiras
 - Descoberta de hosts ativos
-- DNS reverso assíncrono
+- DNS reverso real via PTR, opcional com `--reverse-dns`
 - Fingerprinting básico de serviços
 - Parsing HTTP/HTTPS
 - Controle de concorrência com workers e semáforos
@@ -69,6 +69,7 @@ Exportação de Relatórios
 - Futures
 - Async Networking
 - TCP/UDP Sockets
+- Resolução PTR via resolvedor do sistema (`libc::getnameinfo`)
 - ICMP Handling
 
 ---
@@ -97,6 +98,10 @@ TCP Scan
 ```bash
 cargo run -- 192.168.0.0/24 -p 22,80,443
 ```
+TCP Scan com Reverse DNS
+```bash
+cargo run -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
+```
 UDP Scan
 ```bash
 cargo run -- 192.168.0.1 -udp -p 53,80,1900
@@ -105,6 +110,17 @@ Verbose Debug
 ```bash
 cargo run -- 192.168.0.1 -udp -p 21-25,53,80,1900 --verbose
 ```
+---
+
+📌 Reverse DNS
+
+Por padrão, o scanner mantém dependências e execução leves para ambientes como Termux e usa apenas o IP puro para conectar aos alvos. Para consultar registros PTR reais e preencher a coluna/campo de hostname nos relatórios, habilite:
+
+```bash
+cargo run -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
+```
+
+Os relatórios exportados separam `ip` e `hostname`; quando o hostname não é resolvido, o campo fica vazio ou marcado como `-` no Markdown.
 ---
 
 📊 Exemplo de saída

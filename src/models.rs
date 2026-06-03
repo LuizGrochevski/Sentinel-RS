@@ -3,6 +3,7 @@ use serde::Serialize;
 #[derive(Serialize, Clone, Debug)]
 pub struct ResultadoPorta {
     pub ip: String,
+    pub hostname: Option<String>,
     pub porta: u16,
     pub status: String,
     pub servico: String,
@@ -10,6 +11,7 @@ pub struct ResultadoPorta {
 
 pub struct TrabalhoScan {
     pub ip: String,
+    pub display_name: Option<String>,
     pub porta: u16,
 }
 
@@ -49,4 +51,3 @@ pub fn checar_vulnerabilidades(banner: &str) -> Option<VulnerabilidadeConhecida>
     }
     None
 }
-
