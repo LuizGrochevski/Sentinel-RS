@@ -26,6 +26,9 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
-    #[arg(short,long)]
+    #[arg(short, long)]
     pub udp: bool,
+    
+    #[arg(long = "reverse-dns")]
+    pub reverse_dns: bool,
 }

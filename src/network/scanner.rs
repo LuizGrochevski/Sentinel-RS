@@ -1,22 +1,25 @@
-use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
-use tokio::sync::Semaphore;
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use std::net::IpAddr;
-use std::str::FromStr;
-use ipnet::IpNet;
+use anyhow::{Context, Result};
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
-use anyhow::{Context, Result};
-use tracing::{ warn, debug};
+use ipnet::IpNet;
+use std::net::IpAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
+use tokio::sync::Semaphore;
+use tokio::time::{Duration, timeout};
+use tracing::{debug, warn};
 
-use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::cli::Cli;
-use crate::network::ping::verificar_host_ativo;
+use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::network::fingerprint::detectar_servico;
+use crate::network::ping::verificar_host_ativo;
 
-pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -> Result<Vec<ResultadoPorta>> {
+pub async fn executar_scan(
+    args: &Cli,
+    cancelamento: Arc<tokio::sync::Notify>,
+) -> Result<Vec<ResultadoPorta>> {
     let limite_threads = args.threads;
 
     let mut lista_portas: Vec<u16> = Vec::new();
@@ -32,7 +35,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
             }
             let inicio: u16 = intervalo[0].parse().context("Porta inicial inválida no intervalo")?;
             let fim: u16 = intervalo[1].parse().context("Porta final inválida no intervalo")?;
-            
+
             if inicio > fim {
                 anyhow::bail!("A porta inicial {} não pode ser maior que a final {}!", inicio, fim);
             }
@@ -113,26 +116,51 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         guard.clone()
     };
 
-    spinner_hosts.set_message("Resolvendo hostnames dos alvos ativos em paralelo...".bright_black().to_string());
-
-    let mut tarefas_dns = vec![];
-    for ip in &ips_encontrados {
-        let ip_clone = ip.clone();
-        tarefas_dns.push(tokio::spawn(async move {
-            let ip_com_nome = crate::network::dns::resolver_hostname_reverso(&ip_clone).await;
-            (ip_clone, ip_com_nome)
-        }));
-    }
-
     let mut mapeamento_hosts_completo = std::collections::HashMap::new();
-    for t in tarefas_dns {
-        if let Ok((_ip_original, ip_com_nome)) = t.await {
-            mapeamento_hosts_completo.insert(_ip_original, ip_com_nome);
+
+    if args_compartilhado.reverse_dns {
+        spinner_hosts.set_message(
+            "Resolvendo hostnames dos alvos ativos em paralelo..."
+                .bright_black()
+                .to_string(),
+        );
+
+        let mut tarefas_dns = vec![];
+        for ip in &ips_encontrados {
+            let ip_clone = ip.clone();
+            let timeout_ms = args_compartilhado.timeout;
+            tarefas_dns.push(tokio::spawn(async move {
+                let hostname =
+                    crate::network::dns::resolver_hostname_reverso(&ip_clone, timeout_ms).await;
+                (ip_clone, hostname)
+            }));
+        }
+
+        for t in tarefas_dns {
+            if let Ok((ip_original, hostname)) = t.await {
+                mapeamento_hosts_completo.insert(ip_original, hostname);
+            }
+        }
+
+        for ip in &ips_encontrados {
+            mapeamento_hosts_completo.entry(ip.clone()).or_insert(None);
+        }
+    } else {
+        spinner_hosts.set_message(
+            "Reverse DNS desativado; usando IPs puros."
+                .bright_black()
+                .to_string(),
+        );
+        for ip in &ips_encontrados {
+            mapeamento_hosts_completo.insert(ip.clone(), None);
         }
     }
 
     spinner_hosts.finish_and_clear();
-    println!("🔍 Mapeamento concluído: {} hosts encontrados.", mapeamento_hosts_completo.len().to_string().green().bold());
+    println!(
+        "🔍 Mapeamento concluído: {} hosts encontrados.",
+        mapeamento_hosts_completo.len().to_string().green().bold()
+    );
 
     if ips_encontrados.is_empty() {
         warn!("Nenhum dispositivo online encontrado. Abortando scan.");
@@ -175,6 +203,7 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                 guard.recv().await
             } {
                 let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
+                let alvo_exibicao = trabalho.display_name.as_deref().unwrap_or(&trabalho.ip);
                 debug!("Worker processando alvo: {}", endereco);
 
                 let mut servico_detectado = String::new();
@@ -185,9 +214,13 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                         &trabalho.ip,
                         trabalho.porta,
                         args_worker_clone.timeout,
-                    ).await;
+                    )
+                    .await;
 
-                    if resultado_udp != "Fechada" && !resultado_udp.contains("Falha") && !resultado_udp.contains("Erro") {
+                    if resultado_udp != "Fechada"
+                        && !resultado_udp.contains("Falha")
+                        && !resultado_udp.contains("Erro")
+                    {
                         encontrou = true;
                         servico_detectado = resultado_udp;
                     }
@@ -198,8 +231,10 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                     for tentativa in 0..args_worker_clone.retries {
                         if let Ok(Ok(fluxo)) = timeout(
                             Duration::from_millis(args_worker_clone.timeout),
-                            TcpStream::connect(&endereco)
-                        ).await {
+                            TcpStream::connect(&endereco),
+                        )
+                        .await
+                        {
                             conectado = true;
                             fluxo_final = Some(fluxo);
                             break;
@@ -217,7 +252,8 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                             &trabalho.ip,
                             &mut fluxo,
                             args_worker_clone.timeout,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
 
@@ -226,8 +262,8 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
                     pb.suspend(|| {
                         let alerta = format!(
-                            "[+] Porta {}/{} ABERTA | Status/Serviço: {}",
-                            trabalho.porta, protocolo_tag, servico_detectado
+                            "[+] Alvo {} | Porta {}/{} ABERTA | Status/Serviço: {}",
+                            alvo_exibicao, trabalho.porta, protocolo_tag, servico_detectado
                         );
 
                         if args_worker_clone.udp {
@@ -236,7 +272,9 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
                             println!("{}", alerta.green().bold());
                         }
 
-                        if let Some(vuln) = crate::models::checar_vulnerabilidades(&servico_detectado) {
+                        if let Some(vuln) =
+                            crate::models::checar_vulnerabilidades(&servico_detectado)
+                        {
                             let msg_vuln = format!(
                                 "    ⚠️  [PERIGO - {}] {} -> {}",
                                 vuln.severidade, vuln.cve, vuln.descricao
@@ -251,7 +289,8 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
                     let mut dados = lista_resultados.lock().await;
                     dados.push(ResultadoPorta {
-                        ip: trabalho.ip,
+                        ip: trabalho.ip.clone(),
+                        hostname: trabalho.display_name.clone(),
                         porta: trabalho.porta,
                         status: format!("Aberta ({})", protocolo_tag),
                         servico: servico_detectado,
@@ -264,9 +303,13 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
         lista_workers.push(worker);
     }
 
-    for (_ip_original, ip_com_nome) in mapeamento_hosts_completo {
+    for (ip_original, hostname) in mapeamento_hosts_completo {
         for porta in &lista_portas {
-            let trabalho = TrabalhoScan { ip: ip_com_nome.clone(), porta: *porta };
+            let trabalho = TrabalhoScan {
+                ip: ip_original.clone(),
+                display_name: hostname.clone(),
+                porta: *porta,
+            };
             if tx.send(trabalho).await.is_err() {
                 break;
             }
@@ -275,7 +318,9 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
     drop(tx);
 
-    for w in lista_workers { let _ = w.await; }
+    for w in lista_workers {
+        let _ = w.await;
+    }
 
     barra_compartilhada.finish_and_clear();
 
@@ -286,4 +331,3 @@ pub async fn executar_scan(args: &Cli, cancelamento: Arc<tokio::sync::Notify>) -
 
     Ok(dados_finais)
 }
-

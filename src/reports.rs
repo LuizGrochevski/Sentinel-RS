@@ -1,8 +1,8 @@
+use crate::models::ResultadoPorta;
+use colored::*;
+use serde::Serialize;
 use std::fs::File;
 use std::io::Write as IoWrite;
-use serde::Serialize;
-use colored::*;
-use crate::models::ResultadoPorta;
 
 pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
     if let Err(e) = std::fs::create_dir_all("reports") {
@@ -26,14 +26,18 @@ pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
             Ok(mut arquivo_md) => {
                 let mut sucesso = true;
                 sucesso &= writeln!(arquivo_md, "# 🛡 Relatório de Scan - Sentinel-RS\n").is_ok();
-                sucesso &= writeln!(arquivo_md, "| IP Alvo | Porta | Status | Serviço Detectado |").is_ok();
-                sucesso &= writeln!(arquivo_md, "| :--- | :--- | :--- | :--- |").is_ok();
+                sucesso &= writeln!(arquivo_md, "| IP Alvo | Hostname | Porta | Status | Serviço Detectado |").is_ok();
+                sucesso &= writeln!(arquivo_md, "| :--- | :--- | :--- | :--- | :--- |").is_ok();
 
                 for resultado in dados_finais {
                     sucesso &= writeln!(
                         arquivo_md,
-                        "| {} | {} | {} | {} |",
-                        resultado.ip, resultado.porta, resultado.status, resultado.servico
+                        "| {} | {} | {} | {} | {} |",
+                        resultado.ip,
+                        resultado.hostname.as_deref().unwrap_or("-"),
+                        resultado.porta,
+                        resultado.status,
+                        resultado.servico
                     ).is_ok();
                 }
 
@@ -48,18 +52,28 @@ pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
 
         match File::create("reports/relatorio.csv") {
             Ok(mut arquivo_csv) => {
-                let mut sucesso = writeln!(arquivo_csv, "IP;Porta;Status;Servico").is_ok();
+                let mut sucesso = writeln!(arquivo_csv, "IP;Hostname;Porta;Status;Servico").is_ok();
 
                 for resultado_csv in dados_finais {
                     sucesso &= writeln!(
                         arquivo_csv,
-                        "{};{};{};{}",
-                        resultado_csv.ip, resultado_csv.porta, resultado_csv.status, resultado_csv.servico
-                    ).is_ok();
+                        "{};{};{};{};{}",
+                        resultado_csv.ip,
+                        resultado_csv.hostname.as_deref().unwrap_or(""),
+                        resultado_csv.porta,
+                        resultado_csv.status,
+                        resultado_csv.servico
+                    )
+                    .is_ok();
                 }
 
                 if sucesso {
-                    println!("{}", "📈 CSV gerado com sucesso em 'reports/relatorio.csv'!".green().bold());
+                    println!(
+                        "{}",
+                        "📈 CSV gerado com sucesso em 'reports/relatorio.csv'!"
+                            .green()
+                            .bold()
+                    );
                 } else {
                     eprintln!("{}", "Aviso: Falha ao escrever os dados completos no CSV.".yellow());
                 }
@@ -96,7 +110,10 @@ pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
                         if sucesso {
                             println!("{}", "🔮 Relatório XML gerado com sucesso em 'reports/relatorio.xml'!".green().bold());
                         } else {
-                            eprintln!("{}", "Erro: Falha ao escrever os dados no arquivo XML.".red());
+                            eprintln!(
+                                "{}",
+                                "Erro: Falha ao escrever os dados no arquivo XML.".red()
+                            );
                         }
                     }
                     Err(_) => eprintln!("{}", "Erro: Falha na serialização do XML.".red()),
@@ -104,7 +121,6 @@ pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
             }
             Err(e) => eprintln!("{}: {}", "Erro ao criar o arquivo 'relatorio.xml'".red(), e),
         }
-
     } else {
         println!("{}", "Nenhuma porta aberta encontrada para gerar o relatório.".red());
     }
