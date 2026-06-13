@@ -14,6 +14,7 @@ use tracing::{debug, warn};
 use crate::cli::Cli;
 use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::network::fingerprint::detectar_servico;
+use crate::network::tls::fingerprint_tls;
 use crate::network::ping::verificar_host_ativo;
 
 macro_rules! log_out {
@@ -273,6 +274,17 @@ pub async fn executar_scan(
                             args_worker_clone.timeout,
                         )
                         .await;
+
+                        // TLS fingerprinting em portas HTTPS
+                        if trabalho.porta == 443 || trabalho.porta == 8443 {
+                            if let Some(tls_info) = fingerprint_tls(
+                                &trabalho.ip,
+                                trabalho.porta,
+                                args_worker_clone.timeout * 3,
+                            ).await {
+                                servico_detectado = format!("{} | {}", servico_detectado, tls_info.resumo());
+                            }
+                        }
                     }
                 }
 
