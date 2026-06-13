@@ -1,5 +1,4 @@
-2026-06-13T00:57:00.630151Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
-2026-06-13T00:57:00.699252Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:22
-2026-06-13T00:57:00.701125Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:80
-2026-06-13T00:57:00.717749Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:443
-2026-06-13T00:57:00.825223Z  INFO sentinel_rs: Scan finalizado com sucesso! Passando dados para o motor de relatórios.
+2026-06-13T10:24:36.716028Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso.
+2026-06-13T10:24:36.727078Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:22
+2026-06-13T10:24:36.728533Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:80
+2026-06-13T10:24:36.729626Z DEBUG sentinel_rs::network::scanner: Worker processando alvo: 192.168.0.1:443

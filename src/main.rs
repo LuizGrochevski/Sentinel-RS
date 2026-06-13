@@ -22,6 +22,8 @@ async fn main() {
 
     let nivel_console = if args.verbose {
         LevelFilter::DEBUG
+    } else if args.stdout {
+        LevelFilter::OFF
     } else {
         LevelFilter::INFO
     };
@@ -29,7 +31,7 @@ async fn main() {
     let camada_console = fmt::layer()
         .with_target(false)
         .with_level(true)
-        .with_writer(std::io::stdout)
+        .with_writer(std::io::stderr)
         .with_filter(nivel_console);
 
     let camada_arquivo = fmt::layer()
@@ -62,12 +64,21 @@ async fn main() {
                 return;
             }
 
-            info!("Scan finalizado com sucesso! Passando dados para o motor de relatórios.");
-            reports::gerar_relatorios(&resultados);
+            if args.stdout {
+                match serde_json::to_string(&resultados) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        error!("Erro ao serializar JSON para stdout: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                info!("Scan finalizado com sucesso! Passando dados para o motor de relatórios.");
+                reports::gerar_relatorios(&resultados);
+            }
         }
         Err(erro) => {
             error!("Erro crítico na execução do scanner: {}", erro);
         }
     }
 }
-

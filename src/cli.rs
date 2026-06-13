@@ -5,9 +5,8 @@ use clap::Parser;
     name = "sentinel-rs",
     author = "Luiz Grochevski",
     version = "0.1.0",
-    about = "Scanner de portas assíncron e ultra rápido"
+    about = "Scanner de portas assíncrono e ultra rápido"
 )]
-
 pub struct Cli {
     pub target: String,
 
@@ -28,7 +27,11 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub udp: bool,
-    
+
     #[arg(long = "reverse-dns")]
     pub reverse_dns: bool,
+
+    /// Imprime o resultado em JSON no stdout em vez de salvar arquivos
+    #[arg(long = "stdout")]
+    pub stdout: bool,
 }

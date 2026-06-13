@@ -16,11 +16,22 @@ use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::network::fingerprint::detectar_servico;
 use crate::network::ping::verificar_host_ativo;
 
+macro_rules! log_out {
+    ($stdout:expr, $($arg:tt)*) => {
+        if $stdout {
+            eprintln!($($arg)*);
+        } else {
+            println!($($arg)*);
+        }
+    };
+}
+
 pub async fn executar_scan(
     args: &Cli,
     cancelamento: Arc<tokio::sync::Notify>,
 ) -> Result<Vec<ResultadoPorta>> {
     let limite_threads = args.threads;
+    let usar_stdout = args.stdout;
 
     let mut lista_portas: Vec<u16> = Vec::new();
 
@@ -70,12 +81,12 @@ pub async fn executar_scan(
 
     let protocolo_texto = if args.udp { "UDP (Datagramas)" } else { "TCP (Conexões)" };
 
-    println!("{}", "🛡 Sentinel-RS iniciado!".blue().bold());
-    println!("{} {}", "Protocolo:".cyan(), protocolo_texto.yellow());
-    println!("{} {}", "Alvo especificado:".cyan(), args.target);
-    println!("{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
-    println!("{} {}", "Total de portas por host:".cyan(), lista_portas.len().to_string().yellow());
-    println!("{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
+    log_out!(usar_stdout, "{}", "🛡 Sentinel-RS iniciado!".blue().bold());
+    log_out!(usar_stdout, "{} {}", "Protocolo:".cyan(), protocolo_texto.yellow());
+    log_out!(usar_stdout, "{} {}", "Alvo especificado:".cyan(), args.target);
+    log_out!(usar_stdout, "{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
+    log_out!(usar_stdout, "{} {}", "Total de portas por host:".cyan(), lista_portas.len().to_string().yellow());
+    log_out!(usar_stdout, "{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
 
     let semaforo_ping = Arc::new(Semaphore::new(64));
     let ips_ativos_compartilhados = Arc::new(Mutex::new(Vec::new()));
@@ -109,7 +120,7 @@ pub async fn executar_scan(
         }));
     }
 
-        for t in tarefas_ping { let _ = t.await; }
+    for t in tarefas_ping { let _ = t.await; }
 
     let ips_encontrados = {
         let guard = ips_ativos_compartilhados.lock().await;
@@ -157,7 +168,8 @@ pub async fn executar_scan(
     }
 
     spinner_hosts.finish_and_clear();
-    println!(
+    log_out!(
+        usar_stdout,
         "🔍 Mapeamento concluído: {} hosts encontrados.",
         mapeamento_hosts_completo.len().to_string().green().bold()
     );
@@ -259,6 +271,7 @@ pub async fn executar_scan(
 
                 if encontrou {
                     let protocolo_tag = if args_worker_clone.udp { "UDP" } else { "TCP" };
+                    let usar_stdout_worker = args_worker_clone.stdout;
 
                     pb.suspend(|| {
                         let alerta = format!(
@@ -266,10 +279,18 @@ pub async fn executar_scan(
                             alvo_exibicao, trabalho.porta, protocolo_tag, servico_detectado
                         );
 
-                        if args_worker_clone.udp {
-                            println!("{}", alerta.magenta().bold());
+                        if usar_stdout_worker {
+                            if args_worker_clone.udp {
+                                eprintln!("{}", alerta.magenta().bold());
+                            } else {
+                                eprintln!("{}", alerta.green().bold());
+                            }
                         } else {
-                            println!("{}", alerta.green().bold());
+                            if args_worker_clone.udp {
+                                println!("{}", alerta.magenta().bold());
+                            } else {
+                                println!("{}", alerta.green().bold());
+                            }
                         }
 
                         if let Some(vuln) =
@@ -279,10 +300,18 @@ pub async fn executar_scan(
                                 "    ⚠️  [PERIGO - {}] {} -> {}",
                                 vuln.severidade, vuln.cve, vuln.descricao
                             );
-                            if vuln.severidade == "CRÍTICA" {
-                                println!("{}", msg_vuln.red().bold().blink());
+                            if usar_stdout_worker {
+                                if vuln.severidade == "CRÍTICA" {
+                                    eprintln!("{}", msg_vuln.red().bold().blink());
+                                } else {
+                                    eprintln!("{}", msg_vuln.yellow().bold());
+                                }
                             } else {
-                                println!("{}", msg_vuln.yellow().bold());
+                                if vuln.severidade == "CRÍTICA" {
+                                    println!("{}", msg_vuln.red().bold().blink());
+                                } else {
+                                    println!("{}", msg_vuln.yellow().bold());
+                                }
                             }
                         }
                     });
