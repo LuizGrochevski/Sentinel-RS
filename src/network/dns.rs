@@ -43,6 +43,7 @@ fn resolver_hostname_reverso_bloqueante(ip: IpAddr) -> Option<String> {
     use std::mem;
 
     let mut host = [0 as libc::c_char; 1025];
+    let host_len = host.len();
 
     let retorno = match ip {
         IpAddr::V4(ipv4) => {
@@ -54,12 +55,12 @@ fn resolver_hostname_reverso_bloqueante(ip: IpAddr) -> Option<String> {
                 },
                 sin_zero: [0; 8],
             };
- unsafe {
+            unsafe {
                 libc::getnameinfo(
                     &sockaddr as *const libc::sockaddr_in as *const libc::sockaddr,
                     mem::size_of::<libc::sockaddr_in>() as libc::socklen_t,
                     host.as_mut_ptr(),
-                    host.len() as libc::socklen_t,
+                    host_len,
                     std::ptr::null_mut(),
                     0,
                     libc::NI_NAMEREQD,
@@ -76,13 +77,12 @@ fn resolver_hostname_reverso_bloqueante(ip: IpAddr) -> Option<String> {
                 },
                 sin6_scope_id: 0,
             };
-
             unsafe {
                 libc::getnameinfo(
                     &sockaddr as *const libc::sockaddr_in6 as *const libc::sockaddr,
                     mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t,
                     host.as_mut_ptr(),
-                    host.len() as libc::socklen_t,
+                    host_len,
                     std::ptr::null_mut(),
                     0,
                     libc::NI_NAMEREQD,
