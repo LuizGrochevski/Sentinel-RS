@@ -1,46 +1,52 @@
-Sentinel-RS 🛡️🦀
+# Sentinel-RS 🛡️🦀
 
-Sentinel-RS é uma ferramenta experimental de network scanning desenvolvida em Rust com foco em concorrência assíncrona, performance e exploração de conceitos de infraestrutura/security tooling.
+![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
+![Tokio](https://img.shields.io/badge/Tokio-async-blue?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Android%20(Termux)-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Educational-orange?style=for-the-badge)
 
-O projeto foi arquitetado para rodar de forma eficiente inclusive em ambientes móveis via Termux (Android/ARM), utilizando o runtime assíncrono do Tokio para gerenciar centenas de conexões simultâneas.
+Sentinel-RS é uma ferramenta de network scanning desenvolvida em **Rust** com foco em concorrência assíncrona, performance e segurança. Arquitetada para rodar de forma eficiente inclusive em ambientes móveis via **Termux (Android/ARM)**, utilizando o runtime assíncrono do Tokio para gerenciar centenas de conexões simultâneas.
+
+Integra-se nativamente com a **[Netwatch-API](https://github.com/LuizGrochevski/netwatch-api)** — uma REST API em Python/FastAPI que utiliza o Sentinel-RS como engine de scanning.
 
 ---
 
-🚀 Funcionalidades
+## 🚀 Funcionalidades
 
-- Scanner híbrido TCP + UDP
-- Suporte a ranges e parsing dinâmico de portas
-- Scanner CIDR para sub-redes inteiras
-- Descoberta de hosts ativos
-- DNS reverso real via PTR, opcional com `--reverse-dns`
-- Fingerprinting básico de serviços
-- Parsing HTTP/HTTPS
-- Controle de concorrência com workers e semáforos
-- Timeout configurável
-- Logs verbose/debug
-- Exportação de relatórios em:
+- 🔍 Scanner híbrido **TCP + UDP**
+- 🌐 Suporte a **ranges e parsing dinâmico de portas**
+- 📡 Scanner **CIDR** para sub-redes inteiras
+- 🖥️ Descoberta de hosts ativos
+- 🔎 DNS reverso real via PTR, opcional com `--reverse-dns`
+- 🛠️ Fingerprinting básico de serviços
+- 🔒 Parsing HTTP/HTTPS
+- ⚡ Controle de concorrência com workers e semáforos
+- ⏱️ Timeout configurável
+- 📝 Logs verbose/debug
+- 📊 Exportação de relatórios em **6 formatos**:
   - JSON
   - CSV
-  - XML
   - YAML
+  - XML
   - Markdown
+  - **Nmap XML** *(compatível com Metasploit, Burp Suite e outras ferramentas)*
 
 ---
 
-🧠 Arquitetura
+## 🧠 Arquitetura
 
 O Sentinel-RS utiliza uma arquitetura assíncrona baseada em:
 
 - Tokio Runtime
 - Workers concorrentes
-- Queue de tarefas ("mpsc")
-- Controle de throttling via "Semaphore"
+- Queue de tarefas (`mpsc`)
+- Controle de throttling via `Semaphore`
 - Timeout handling
 - Probing TCP/UDP paralelo
 
 Fluxo simplificado:
 
-```bash
+```
 CIDR/IP
    ↓
 Host Discovery
@@ -51,143 +57,182 @@ Workers Concorrentes
    ↓
 Fingerprinting
    ↓
-Exportação de Relatórios
+Exportação de Relatórios (JSON, CSV, YAML, XML, Markdown, Nmap XML)
 ```
----
-
-📸 Demonstração
-
-![Sentinel-RS Screenshot](assets/image.png)
 
 ---
 
-🛠️ Tecnologias Utilizadas
+## 🔗 Integração com Netwatch-API
 
-- Rust
-- Tokio
-- Tokio-Rustls
-- Futures
-- Async Networking
-- TCP/UDP Sockets
-- Resolução PTR via resolvedor do sistema (`libc::getnameinfo`)
-- ICMP Handling
+O Sentinel-RS pode ser usado como engine de scanning da **[Netwatch-API](https://github.com/LuizGrochevski/netwatch-api)**, uma REST API com autenticação JWT que expõe os resultados via HTTP.
+
+```
+POST /scan (Netwatch-API)
+    │
+    ▼
+sentinel-rs (binário)
+    │
+    ▼
+JSON report → resposta da API
+```
+
+```bash
+# Exemplo via Netwatch-API
+curl -X POST http://localhost:8000/scan \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"targets": ["192.168.0.1"], "ports": "22,80,443", "protocol": "tcp"}'
+```
 
 ---
 
-📦 Rodando no Termux (Android)
+## 🛠️ Tecnologias
 
-Instalação
+| Tecnologia | Uso |
+|---|---|
+| Rust | Linguagem principal |
+| Tokio | Runtime assíncrono |
+| Tokio-Rustls | TLS assíncrono |
+| libc | DNS reverso via `getnameinfo` |
+| serde / serde_json | Serialização JSON |
+| serde_yaml | Serialização YAML |
+| quick-xml | Serialização XML e Nmap XML |
+| clap | CLI arguments |
+| tracing | Logs estruturados |
+| indicatif | Barra de progresso |
+
+---
+
+## 📦 Instalação no Termux (Android)
+
 ```bash
 pkg update && pkg upgrade
 pkg install rust clang make git
 ```
-Clone o projeto
+
 ```bash
 git clone https://github.com/LuizGrochevski/Sentinel-RS.git
 cd Sentinel-RS
+cargo build --release
 ```
-Compile e execute
-```bash
-cargo run --release -- 192.168.0.0/24 -p 22,80,443 -t 150
-```
+
 ---
 
-📄 Exemplo de uso
+## 📄 Exemplos de uso
 
-TCP Scan
+**TCP Scan**
 ```bash
-cargo run -- 192.168.0.0/24 -p 22,80,443
+cargo run --release -- 192.168.0.0/24 -p 22,80,443
 ```
-TCP Scan com Reverse DNS
+
+**TCP Scan com Reverse DNS**
 ```bash
-cargo run -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
+cargo run --release -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
 ```
-UDP Scan
+
+**UDP Scan**
 ```bash
-cargo run -- 192.168.0.1 -udp -p 53,80,1900
+cargo run --release -- 192.168.0.1 -udp -p 53,80,1900
 ```
-Verbose Debug
+
+**Verbose Debug**
 ```bash
-cargo run -- 192.168.0.1 -udp -p 21-25,53,80,1900 --verbose
+cargo run --release -- 192.168.0.1 -p 21-25,53,80,1900 --verbose
 ```
+
 ---
 
-📌 Reverse DNS
+## 📊 Exemplo de saída
 
-Por padrão, o scanner mantém dependências e execução leves para ambientes como Termux e usa apenas o IP puro para conectar aos alvos. Para consultar registros PTR reais e preencher a coluna/campo de hostname nos relatórios, habilite:
-
-```bash
-cargo run -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
 ```
-
-Os relatórios exportados separam `ip` e `hostname`; quando o hostname não é resolvido, o campo fica vazio ou marcado como `-` no Markdown.
----
-
-📊 Exemplo de saída
-```bash
 🛡 Sentinel-RS iniciado!
-Protocolo: UDP (Datagramas)
+Protocolo: TCP (Conexões)
 Alvo especificado: 192.168.0.1
 Total de IPs para analisar: 1
-Total de portas por host: 8
+Total de portas por host: 3
 Concorrência máxima: 100 conexões simultâneas
 
 🔍 Mapeamento concluído: 1 hosts encontrados.
-2026-05-28T16:36:37.269607Z DEBUG Worker processando alvo: 192.168.0.1:21
-2026-05-28T16:36:37.271011Z DEBUG Worker processando alvo: 192.168.0.1:22
-2026-05-28T16:36:37.272065Z DEBUG Worker processando alvo: 192.168.0.1:23
-2026-05-28T16:36:37.273159Z DEBUG Worker processando alvo: 192.168.0.1:24
-2026-05-28T16:36:37.273324Z DEBUG Worker processando alvo: 192.168.0.1:25
-2026-05-28T16:36:37.274402Z DEBUG Worker processando alvo: 192.168.0.1:53
-2026-05-28T16:36:37.275064Z DEBUG Worker processando alvo: 192.168.0.1:80
-2026-05-28T16:36:37.275797Z DEBUG Worker processando alvo: 192.168.0.1:1900
-2026-05-28T16:36:37.283372Z DEBUG Porta UDP 21 fechada (ICMP Connection Refused)
-[00:00:00] [#####>-------------------------------------] 1/8 portas (0s)
-2026-05-28T16:36:37.283940Z DEBUG Porta UDP 22 fechada (ICMP Connection Refused)
-[+] Porta 53/UDP ABERTA | Status/Serviço: Aberta | Filtrada (Sem resposta ao Probe)
-[+] Porta 23/UDP ABERTA | Status/Serviço: Aberta | Filtrada
-[+] Porta 80/UDP ABERTA | Status/Serviço: Aberta | Filtrada
-[+] Porta 25/UDP ABERTA | Status/Serviço: Aberta | Filtrada
-[+] Porta 1900/UDP ABERTA | Status/Serviço: Aberta | Filtrada
-[+] Porta 24/UDP ABERTA | Status/Serviço: Aberta | Filtrada
-2026-05-28T16:36:37.430002Z  INFO Scan finalizado com sucesso! Passando dados para o motor de relatórios.
+[+] Alvo 192.168.0.1 | Porta 80/TCP ABERTA | Status/Serviço: HTTP
 
 💾 Relatório JSON salvo com sucesso em 'reports/relatorio.json'!
 📊 Tabela em Markdown gerada em 'reports/relatorio.md'!
 📈 CSV gerado com sucesso em 'reports/relatorio.csv'!
 💾 Relatório YAML salvo com sucesso em 'reports/relatorio.yaml'!
 🔮 Relatório XML gerado com sucesso em 'reports/relatorio.xml'!
-
+🗺  Relatório Nmap XML gerado em 'reports/relatorio_nmap.xml'!
 ```
+
+**Exemplo de Nmap XML gerado:**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="sentinel-rs" version="0.1.0" xmloutputversion="1.04">
+  <host>
+    <status state="up" reason="syn-ack"/>
+    <address addr="192.168.0.1" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open" reason="syn-ack"/>
+        <service name="http" method="table" conf="3"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>
+```
+
 ---
 
-🧪 Objetivos do Projeto
+## 📌 Reverse DNS
+
+Por padrão, o scanner usa apenas o IP para conectar aos alvos. Para consultar registros PTR reais e preencher o campo hostname nos relatórios:
+
+```bash
+cargo run --release -- 192.168.0.0/24 -p 22,80,443 --reverse-dns
+```
+
+Os relatórios exportados separam `ip` e `hostname`. Quando o hostname não é resolvido, o campo fica vazio ou marcado como `-` no Markdown.
+
+---
+
+## 🧪 Objetivos do Projeto
 
 O Sentinel-RS foi criado como laboratório prático para estudo de:
 
-- programação assíncrona em Rust
-- concorrência segura
-- networking de baixo nível
-- scanning de rede
-- fingerprinting
-- arquitetura de ferramentas de infraestrutura
-- otimização para ambientes ARM/mobile
+- Programação assíncrona em Rust
+- Concorrência segura
+- Networking de baixo nível
+- Scanning de rede e fingerprinting
+- Arquitetura de ferramentas de infraestrutura
+- Otimização para ambientes ARM/mobile
+- Compatibilidade com ecossistema de segurança (Nmap XML)
 
 ---
 
-🛣️ Roadmap
+## 🛣️ Roadmap
 
-- SYN Scan (raw sockets)
-- Fingerprinting avançado
-- TLS fingerprinting
-- Worker pools dedicados
-- Structured logging ("tracing")
-- Compatibilidade parcial com Nmap XML
-- UDP improvements
-- Service signature database
+- [x] Scanner TCP + UDP
+- [x] CIDR scanning
+- [x] Fingerprinting básico de serviços
+- [x] DNS reverso via PTR
+- [x] Exportação JSON, CSV, YAML, XML, Markdown
+- [x] **Compatibilidade Nmap XML**
+- [x] Structured logging (`tracing`)
+- [ ] SYN Scan (raw sockets)
+- [ ] Fingerprinting avançado
+- [ ] TLS fingerprinting
+- [ ] Service signature database
+- [ ] UDP improvements
 
 ---
 
-⚠️ Aviso
+## 👨‍💻 Autor
+
+**Luiz Felipe Grochevski** — [LinkedIn](https://www.linkedin.com/in/luiz-felipe-grochevski) | [GitHub](https://github.com/LuizGrochevski)
+
+---
+
+## ⚠️ Aviso
 
 Este projeto é destinado exclusivamente para fins educacionais, laboratoriais e auditorias autorizadas em ambientes controlados.
+
