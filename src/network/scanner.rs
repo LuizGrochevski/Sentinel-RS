@@ -175,7 +175,10 @@ pub async fn executar_scan(
     );
 
     if ips_encontrados.is_empty() {
-        warn!("Nenhum dispositivo online encontrado. Abortando scan.");
+        warn!(
+            target = %args.target,
+            "Nenhum dispositivo online encontrado com os critérios atuais. Abortando scan."
+        );
         return Ok(Vec::new());
     }
 
@@ -216,7 +219,11 @@ pub async fn executar_scan(
             } {
                 let endereco = format!("{}:{}", trabalho.ip, trabalho.porta);
                 let alvo_exibicao = trabalho.display_name.as_deref().unwrap_or(&trabalho.ip);
-                debug!("Worker processando alvo: {}", endereco);
+                debug!(
+                    ip = %trabalho.ip,
+                    porta = trabalho.porta,
+                    "Worker processando alvo."
+                );
 
                 let mut servico_detectado = String::new();
                 let mut encontrou = false;

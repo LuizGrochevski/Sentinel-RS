@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use std::fs::File;
 
-use tracing::{info, warn, error};
+use tracing::{info, warn, error, debug};
 use tracing_subscriber::{fmt, prelude::*, filter::LevelFilter};
 
 #[tokio::main]
@@ -45,7 +45,13 @@ async fn main() {
         .with(camada_arquivo)
         .init();
 
-    info!("Sentinel-RS inicializado com sucesso.");
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        target = %args.target,
+        protocol = if args.udp { "udp" } else { "tcp" },
+        stdout_mode = args.stdout,
+        "Sentinel-RS inicializado com sucesso."
+    );
 
     let token_cancelamento = Arc::new(Notify::new());
     let token_clone = Arc::clone(&token_cancelamento);
@@ -57,28 +63,50 @@ async fn main() {
         }
     });
 
+    debug!(
+        ports = %args.ports,
+        threads = args.threads,
+        timeout_ms = args.timeout,
+        retries = args.retries,
+        reverse_dns = args.reverse_dns,
+        "Configuração do scan carregada."
+    );
+
     match network::executar_scan(&args, token_cancelamento).await {
         Ok(resultados) => {
             if resultados.is_empty() {
-                warn!("Nenhum resultado capturado para exportar.");
+                warn!(
+                    target = %args.target,
+                    "Nenhum resultado capturado para exportar."
+                );
                 return;
             }
+
+            info!(
+                target = %args.target,
+                total_portas_abertas = resultados.len(),
+                "Scan finalizado com sucesso!"
+            );
 
             if args.stdout {
                 match serde_json::to_string(&resultados) {
                     Ok(json) => println!("{}", json),
                     Err(e) => {
-                        error!("Erro ao serializar JSON para stdout: {}", e);
+                        error!(error = %e, "Erro ao serializar JSON para stdout.");
                         std::process::exit(1);
                     }
                 }
             } else {
-                info!("Scan finalizado com sucesso! Passando dados para o motor de relatórios.");
+                info!("Passando dados para o motor de relatórios.");
                 reports::gerar_relatorios(&resultados);
             }
         }
         Err(erro) => {
-            error!("Erro crítico na execução do scanner: {}", erro);
+            error!(
+                target = %args.target,
+                error = %erro,
+                "Erro crítico na execução do scanner."
+            );
         }
     }
 }
