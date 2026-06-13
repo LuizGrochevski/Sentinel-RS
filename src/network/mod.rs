@@ -8,3 +8,4 @@ pub use scanner::executar_scan;
 
 pub mod signatures;
 pub mod tls;
+pub mod syn;
