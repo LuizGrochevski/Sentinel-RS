@@ -6,3 +6,4 @@ pub mod dns;
 
 pub use scanner::executar_scan;
 
+pub mod signatures;

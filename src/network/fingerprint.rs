@@ -1,3 +1,4 @@
+use crate::network::signatures::identificar_por_banner;
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 fn nome_padrao_porta(porta: u16) -> String {
+    // Fallback por porta conhecida
     match porta {
         80 => "HTTP".to_string(),
         21 => "FTP (Provável)".to_string(),
@@ -229,3 +231,23 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nome_padrao_http() {
+        assert_eq!(nome_padrao_porta(80), "HTTP");
+    }
+
+    #[test]
+    fn test_nome_padrao_ftp() {
+        assert!(nome_padrao_porta(21).contains("FTP"));
+    }
+
+    #[test]
+    fn test_nome_padrao_desconhecido() {
+        assert_eq!(nome_padrao_porta(9999), "Desconhecido");
+    }
+}
