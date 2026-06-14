@@ -5,35 +5,55 @@ use clap::Parser;
     name = "sentinel-rs",
     author = "Luiz Grochevski",
     version = "0.1.0",
-    about = "Scanner de portas assíncrono e ultra rápido"
+    about = "🛡️ Scanner de rede assíncrono de alta performance",
+    long_about = "Sentinel-RS é um scanner de rede TCP/UDP/SYN construído em Rust com Tokio.\n\
+                  Suporta CIDR, fingerprinting de serviços, TLS, DNS reverso e múltiplos\n\
+                  formatos de relatório. Integra-se com a Netwatch-API via --stdout.\n\n\
+                  Exemplos:\n  \
+                  sentinel-rs 192.168.0.1 -p 22,80,443\n  \
+                  sentinel-rs 192.168.0.0/24 -p 1-1000 --reverse-dns\n  \
+                  sentinel-rs 192.168.0.1 -p 80,443 --stdout 2>/dev/null\n  \
+                  sudo sentinel-rs 192.168.0.1 -p 22,80,443 --syn"
 )]
 pub struct Cli {
+    /// IP, hostname ou bloco CIDR alvo (ex: 192.168.0.1, 192.168.0.0/24)
     pub target: String,
 
+    /// Portas a escanear. Suporta lista e ranges (ex: 22,80,443 ou 1-1000)
     #[arg(short = 'p', long = "ports", default_value = "1-1000")]
     pub ports: String,
 
+    /// Número máximo de conexões simultâneas
     #[arg(short = 't', long = "threads", default_value = "100")]
     pub threads: usize,
 
+    /// Timeout em milissegundos por conexão
     #[arg(long, default_value_t = 100)]
     pub timeout: u64,
 
+    /// Número de tentativas por porta antes de desistir
     #[arg(long, default_value_t = 1)]
     pub retries: usize,
 
+    /// Ativa logs de debug detalhados
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// Usa protocolo UDP em vez de TCP
     #[arg(short, long)]
     pub udp: bool,
 
+    /// Resolve hostnames via DNS reverso (PTR) para cada IP ativo
     #[arg(long = "reverse-dns")]
     pub reverse_dns: bool,
 
-    /// Imprime o resultado em JSON no stdout em vez de salvar arquivos
+    /// Imprime resultado em JSON no stdout (silencia logs — ideal para pipelines)
     #[arg(long = "stdout")]
     pub stdout: bool,
+
+    /// Usa SYN scan via raw sockets — mais furtivo (requer root ou CAP_NET_RAW)
+    #[arg(long = "syn")]
+    pub syn: bool,
 }
 
 #[cfg(test)]
@@ -83,6 +103,7 @@ mod tests {
         assert_eq!(args.retries, 1);
         assert!(!args.stdout);
         assert!(!args.udp);
+        assert!(!args.syn);
     }
 
     #[test]
