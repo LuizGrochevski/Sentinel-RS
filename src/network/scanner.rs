@@ -347,6 +347,7 @@ pub async fn executar_scan(
                         status: format!("Aberta ({})", protocolo_tag),
                         servico: servico_detectado.exibicao.clone(),
                         versao: servico_detectado.versao.clone(),
+                        produto: servico_detectado.servico.clone(),
                     });
                 }
                 pb.inc(1);
