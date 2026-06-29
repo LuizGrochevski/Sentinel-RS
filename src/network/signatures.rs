@@ -5,7 +5,7 @@ pub struct Assinatura {
     pub categoria: &'static str,
 }
 
-pub fn identificar_por_banner(banner: &str) -> Option<String> {
+pub fn identificar_estruturado(banner: &str) -> (Option<String>, Option<String>, Option<&'static str>) {
     let assinaturas = vec![
         // Web Servers
         Assinatura { gatilho: "Apache/", nome: "Apache HTTPD", categoria: "Web Server" },
@@ -69,14 +69,21 @@ pub fn identificar_por_banner(banner: &str) -> Option<String> {
 
     for sig in &assinaturas {
         if banner_lower.contains(&sig.gatilho.to_lowercase()) {
-            // Tenta extrair versão do banner
-            if let Some(versao) = extrair_versao(banner, sig.gatilho) {
-                return Some(format!("{} {} [{}]", sig.nome, versao, sig.categoria));
-            }
-            return Some(format!("{} [{}]", sig.nome, sig.categoria));
+            let versao = extrair_versao(banner, sig.gatilho);
+            return (Some(sig.nome.to_string()), versao, Some(sig.categoria));
         }
     }
-    None
+    (None, None, None)
+}
+
+pub fn identificar_por_banner(banner: &str) -> Option<String> {
+    let (nome, versao, categoria) = identificar_estruturado(banner);
+    let nome = nome?;
+    let categoria = categoria.unwrap_or("Desconhecido");
+    match versao {
+        Some(v) => Some(format!("{} {} [{}]", nome, v, categoria)),
+        None => Some(format!("{} [{}]", nome, categoria)),
+    }
 }
 
 fn extrair_versao(banner: &str, gatilho: &str) -> Option<String> {

@@ -1,4 +1,4 @@
-use crate::network::signatures::identificar_por_banner;
+use crate::network::signatures::identificar_estruturado;
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -63,7 +63,18 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
     }
 }
 
-pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeout_ms: u64) -> String {
+pub struct ServicoDetectado {
+    pub exibicao: String,
+    pub servico: Option<String>,
+    pub versao: Option<String>,
+}
+
+pub fn montar_resultado(exibicao: String) -> ServicoDetectado {
+    let (servico, versao, _categoria) = identificar_estruturado(&exibicao);
+    ServicoDetectado { exibicao, servico, versao }
+}
+
+pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeout_ms: u64) -> ServicoDetectado {
     let mut buffer = [0; 256];
     let d_timeout = Duration::from_millis(timeout_ms);
 
@@ -74,22 +85,22 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
                         let banner = resposta["220".len()..].trim();
-                        return format!("FTP -> {}", banner.lines().next().unwrap_or(""));
+                        return montar_resultado(format!("FTP -> {}", banner.lines().next().unwrap_or("")));
                     }
-                    return resposta.lines().next().unwrap_or("FTP").trim().to_string();
+                    return montar_resultado(resposta.lines().next().unwrap_or("FTP").trim().to_string());
                 }
             }
-            "FTP (Sem Banner)".to_string()
+            montar_resultado("FTP (Sem Banner)".to_string())
         }
 
         22 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
                     let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    return banner.lines().next().unwrap_or("SSH").trim().to_string();
+                    return montar_resultado(banner.lines().next().unwrap_or("SSH").trim().to_string());
                 }
             }
-            "SSH (Sem Banner)".to_string()
+            montar_resultado("SSH (Sem Banner)".to_string())
         }
 
         25 => {
@@ -98,15 +109,15 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
                         let banner = resposta["220".len()..].trim();
-                        return format!("SMTP -> {}", banner.lines().next().unwrap_or(""));
+                        return montar_resultado(format!("SMTP -> {}", banner.lines().next().unwrap_or("")));
                     }
-                    return resposta.lines().next().unwrap_or("SMTP").trim().to_string();
+                    return montar_resultado(resposta.lines().next().unwrap_or("SMTP").trim().to_string());
                 }
             }
-            "SMTP (Sem Banner)".to_string()
+            montar_resultado("SMTP (Sem Banner)".to_string())
         }
 
-        53 => "DNS (TCP)".to_string(),
+        53 => montar_resultado("DNS (TCP)".to_string()),
 
         443 => {
             let mut raizes = RootCertStore::empty();
@@ -149,20 +160,20 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                                 }
 
                                 if !banner_servidor.is_empty() {
-                                    return format!("HTTPS ({}) -> Servidor: {}", status_line, banner_servidor);
+                                    return montar_resultado(format!("HTTPS ({}) -> Servidor: {}", status_line, banner_servidor));
                                 } else if !status_line.is_empty() {
-                                    return format!("HTTPS ({})", status_line);
+                                    return montar_resultado(format!("HTTPS ({})", status_line));
                                 }
                             }
                         }
                     }
-                    return "HTTPS (Conexão Segura Estabelecida)".to_string();
+                    return montar_resultado("HTTPS (Conexão Segura Estabelecida)".to_string());
                 }
             }
-            "HTTPS (Falha no Handshake TLS)".to_string()
+            montar_resultado("HTTPS (Falha no Handshake TLS)".to_string())
         }
 
-        5432 => "PostgreSQL".to_string(),
+        5432 => montar_resultado("PostgreSQL".to_string()),
 
         3306 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
@@ -171,11 +182,11 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     if resposta.contains("mysql") || resposta.contains("MariaDB") || !resposta.is_empty() {
                         let versao = resposta.lines().next().unwrap_or("MySQL").trim();
                         let versao_limpa: String = versao.chars().filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c)).collect();
-                        return format!("MySQL/MariaDB ({})", versao_limpa.trim());
+                        return montar_resultado(format!("MySQL/MariaDB ({})", versao_limpa.trim()));
                     }
                 }
             }
-            "MySQL (Provável)".to_string()
+            montar_resultado("MySQL (Provável)".to_string())
         }
 
         6379 => {
@@ -184,11 +195,11 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                 if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.contains("+PONG") {
-                        return "Redis Cache Server (Ativo)".to_string();
+                        return montar_resultado("Redis Cache Server (Ativo)".to_string());
                     }
                 }
             }
-            "Redis (Provável)".to_string()
+            montar_resultado("Redis (Provável)".to_string())
         }
 
         _ => {
@@ -215,18 +226,18 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                                 }
                             }
                             if !banner_servidor.is_empty() {
-                                return format!("HTTP/Serviço Web ({}) -> Servidor: {}", primeira_linha, banner_servidor);
+                                return montar_resultado(format!("HTTP/Serviço Web ({}) -> Servidor: {}", primeira_linha, banner_servidor));
                             }
-                            return format!("HTTP/Serviço Web ({})", primeira_linha);
+                            return montar_resultado(format!("HTTP/Serviço Web ({})", primeira_linha));
                         }
 
                         if !primeira_linha.is_empty() {
-                            return primeira_linha.to_string();
+                            return montar_resultado(primeira_linha.to_string());
                         }
                     }
                 }
             }
-            nome_padrao_porta(porta)
+            montar_resultado(nome_padrao_porta(porta))
         }
     }
 }

@@ -226,7 +226,11 @@ pub async fn executar_scan(
                     "Worker processando alvo."
                 );
 
-                let mut servico_detectado = String::new();
+                let mut servico_detectado = crate::network::fingerprint::ServicoDetectado {
+                    exibicao: String::new(),
+                    servico: None,
+                    versao: None,
+                };
                 let mut encontrou = false;
 
                 if args_worker_clone.udp {
@@ -242,7 +246,7 @@ pub async fn executar_scan(
                         && !resultado_udp.contains("Erro")
                     {
                         encontrou = true;
-                        servico_detectado = resultado_udp;
+                        servico_detectado = crate::network::fingerprint::montar_resultado(resultado_udp);
                     }
                 } else {
                     let mut conectado = false;
@@ -282,7 +286,7 @@ pub async fn executar_scan(
                                 trabalho.porta,
                                 args_worker_clone.timeout * 3,
                             ).await {
-                                servico_detectado = format!("{} | {}", servico_detectado, tls_info.resumo());
+                                servico_detectado.exibicao = format!("{} | {}", servico_detectado.exibicao, tls_info.resumo());
                             }
                         }
                     }
@@ -295,7 +299,7 @@ pub async fn executar_scan(
                     pb.suspend(|| {
                         let alerta = format!(
                             "[+] Alvo {} | Porta {}/{} ABERTA | Status/Serviço: {}",
-                            alvo_exibicao, trabalho.porta, protocolo_tag, servico_detectado
+                            alvo_exibicao, trabalho.porta, protocolo_tag, servico_detectado.exibicao
                         );
 
                         if usar_stdout_worker {
@@ -313,7 +317,7 @@ pub async fn executar_scan(
                         }
 
                         if let Some(vuln) =
-                            crate::models::checar_vulnerabilidades(&servico_detectado)
+                            crate::models::checar_vulnerabilidades(&servico_detectado.exibicao)
                         {
                             let msg_vuln = format!(
                                 "    ⚠️  [PERIGO - {}] {} -> {}",
@@ -341,7 +345,8 @@ pub async fn executar_scan(
                         hostname: trabalho.display_name.clone(),
                         porta: trabalho.porta,
                         status: format!("Aberta ({})", protocolo_tag),
-                        servico: servico_detectado,
+                        servico: servico_detectado.exibicao.clone(),
+                        versao: servico_detectado.versao.clone(),
                     });
                 }
                 pb.inc(1);

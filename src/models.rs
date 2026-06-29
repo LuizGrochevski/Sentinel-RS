@@ -7,6 +7,7 @@ pub struct ResultadoPorta {
     pub porta: u16,
     pub status: String,
     pub servico: String,
+    pub versao: Option<String>,
 }
 
 pub struct TrabalhoScan {
@@ -103,6 +104,7 @@ mod tests {
             porta: 80,
             status: "Aberta (TCP)".to_string(),
             servico: "HTTP".to_string(),
+            versao: None,
         };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("192.168.0.1"));
@@ -118,6 +120,7 @@ mod tests {
             porta: 443,
             status: "Aberta (TCP)".to_string(),
             servico: "HTTPS".to_string(),
+            versao: None,
         };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("null"));
