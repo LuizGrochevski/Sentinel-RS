@@ -1,4 +1,0 @@
-2026-06-13T11:34:25.989867Z  INFO sentinel_rs: Sentinel-RS inicializado com sucesso. version="0.1.0" target=192.168.0.0/24 protocol="tcp" stdout_mode=true
-2026-06-13T11:34:25.990009Z DEBUG sentinel_rs: Configuração do scan carregada. ports=443 threads=100 timeout_ms=100 retries=1 reverse_dns=false
-2026-06-13T11:34:27.317516Z  WARN sentinel_rs::network::scanner: Nenhum dispositivo online encontrado com os critérios atuais. Abortando scan. target=192.168.0.0/24
-2026-06-13T11:34:27.318890Z  WARN sentinel_rs: Nenhum resultado capturado para exportar. target=192.168.0.0/24

@@ -1,18 +1,45 @@
 use pnet::datalink;
-use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
 use pnet::packet::ip::IpNextHeaderProtocols;
-use pnet::packet::ipv4::{Ipv4Flags, MutableIpv4Packet};
 use pnet::packet::tcp::{MutableTcpPacket, TcpFlags, TcpPacket};
-use pnet::packet::{MutablePacket, Packet};
+use pnet::packet::Packet;
 use pnet::transport::{
     self, TransportChannelType, TransportProtocol,
 };
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tracing::{debug, warn};
 
 const TCP_HEADER_LEN: usize = 20;
-const IPV4_HEADER_LEN: usize = 20;
+
+/// Contador atômico global para portas de origem do SYN scan.
+///
+/// Por que isso existe: usar `49152 + (porta_destino % N)` faz duas portas de
+/// destino diferentes colidirem na mesma porta de origem sempre que diferem por
+/// um múltiplo de N (ex: portas 80 e 16463 com N=16383). Como o scanner roda
+/// múltiplos workers concorrentes (ver arquitetura no README), isso causa troca
+/// de respostas entre scans simultâneos — um SYN-ACK destinado ao worker da
+/// porta 80 pode ser lido pelo worker da porta 16463.
+///
+/// Um contador atômico garante que cada chamada a `proxima_porta_origem()`
+/// recebe uma porta diferente da anterior, mesmo sob alta concorrência,
+/// eliminando a colisão determinística. O espaço de portas efêmeras
+/// (49152–65535, ~16383 portas) ainda pode dar wrap sob volume extremo de
+/// scans simultâneos, mas nesse ponto conexões antigas já tiveram tempo de
+/// fechar — o mesmo trade-off que o próprio kernel faz ao reciclar portas
+/// efêmeras.
+static PROXIMA_PORTA: AtomicU16 = AtomicU16::new(0);
+
+/// Faixa de portas efêmeras usada para origem do SYN scan (IANA dynamic range).
+const PORTA_EFEMERA_BASE: u16 = 49152;
+const PORTA_EFEMERA_RANGE: u16 = 65535 - PORTA_EFEMERA_BASE; // ~16383
+
+/// Gera a próxima porta de origem de forma atômica e sequencial,
+/// evitando colisões entre workers concorrentes do SYN scan.
+fn proxima_porta_origem() -> u16 {
+    let offset = PROXIMA_PORTA.fetch_add(1, Ordering::Relaxed) % PORTA_EFEMERA_RANGE;
+    PORTA_EFEMERA_BASE + offset
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EstadoPortaSyn {
@@ -104,7 +131,10 @@ pub async fn syn_scan_porta(
         }
     };
 
-    let src_porta: u16 = 49152 + (porta % 16383);
+    // Porta de origem única por chamada — evita colisão entre workers
+    // concorrentes escaneando portas de destino diferentes (ver doc do
+    // contador PROXIMA_PORTA acima).
+    let src_porta: u16 = proxima_porta_origem();
 
     // Abre canal de transporte raw
     let (mut tx, mut rx) = match transport::transport_channel(
@@ -145,7 +175,7 @@ pub async fn syn_scan_porta(
         return ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada };
     }
 
-    debug!(ip = %dst_ip, porta, "Pacote SYN enviado.");
+    debug!(ip = %dst_ip, porta, src_porta, "Pacote SYN enviado.");
 
     // Aguarda resposta
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
@@ -165,6 +195,9 @@ pub async fn syn_scan_porta(
                     }
                 }
 
+                // Filtra pacotes que não são resposta a ESTA porta de origem
+                // específica — essencial agora que cada chamada usa uma porta
+                // diferente, garante que não processamos resposta de outro worker.
                 if packet.get_destination() != src_porta {
                     continue;
                 }
@@ -250,4 +283,57 @@ mod tests {
         // Só testa que a função não panica
         let _ip = obter_ip_local();
     }
+
+    #[test]
+    fn test_proxima_porta_origem_esta_na_faixa_efemera() {
+        let porta = proxima_porta_origem();
+        assert!(porta >= PORTA_EFEMERA_BASE);
+        assert!(porta < 65535);
+    }
+
+    #[test]
+    fn test_proxima_porta_origem_e_sequencial_sem_colisao_imediata() {
+        // Duas chamadas consecutivas nunca devem repetir a mesma porta,
+        // ao contrário do antigo cálculo `49152 + (porta % 16383)` que
+        // colidia para portas de destino que diferiam por múltiplos de N.
+        let p1 = proxima_porta_origem();
+        let p2 = proxima_porta_origem();
+        assert_ne!(p1, p2, "portas consecutivas não deveriam colidir");
+    }
+
+    #[test]
+    fn test_proxima_porta_origem_concorrente_sem_colisao() {
+        use std::collections::HashSet;
+        use std::thread;
+
+        // Simula concorrência real: várias threads pedindo portas ao mesmo
+        // tempo, como os workers do scanner fazem. Coleta todas e garante
+        // que não houve nenhuma duplicata.
+        let handles: Vec<_> = (0..50)
+            .map(|_| thread::spawn(proxima_porta_origem))
+            .collect();
+
+        let portas: Vec<u16> = handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .collect();
+
+        let unicas: HashSet<u16> = portas.iter().copied().collect();
+        assert_eq!(
+            portas.len(),
+            unicas.len(),
+            "contador atômico deveria garantir portas únicas sob concorrência"
+        );
+    }
+
+    #[test]
+    fn test_velha_formula_colidia_caso_documentado() {
+        // Documenta o bug original para referência: com a fórmula antiga
+        // `49152 + (porta % 16383)`, as portas de destino 80 e 16463
+        // resultavam na MESMA porta de origem. Este teste apenas registra
+        // o caso para histórico — a fórmula antiga não é mais usada.
+        let formula_antiga = |porta: u16| -> u16 { 49152 + (porta % 16383) };
+        assert_eq!(formula_antiga(80), formula_antiga(16463));
+    }
 }
+
