@@ -72,7 +72,9 @@ Resposta da API
 ```bash
 # Uso direto com --stdout
 ./sentinel-rs 192.168.0.1 -p 22,80,443 --stdout 2>/dev/null
-# Saída: [{"ip":"192.168.0.1","porta":80,"status":"Aberta (TCP)","servico":"HTTP"}]
+# Saída: [{"ip":"192.168.0.1","porta":80,"status":"Aberta (TCP)","servico":"HTTP","versao":null,"produto":null}]
+Quando o banner permite extração, produto e versao vêm preenchidos separadamente da string de exibição (servico), permitindo que consumidores montem keywords precisas para consulta de CVEs (ex: "OpenSSH 6.6.1p1"):
+{"servico":"SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13","versao":"6.6.1p1","produto":"OpenSSH"}
 ```
 
 ---
