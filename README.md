@@ -3,7 +3,7 @@
 ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
 ![Tokio](https://img.shields.io/badge/Tokio-async-blue?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Android%20(Termux)-green?style=for-the-badge)
-![Tests](https://img.shields.io/badge/Tests-34%20passing-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-43%20passing-brightgreen?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Educational-orange?style=for-the-badge)
 
 Sentinel-RS é uma ferramenta de network scanning desenvolvida em **Rust** com foco em concorrência assíncrona, performance e segurança. Arquitetada para rodar de forma eficiente inclusive em ambientes móveis via **Termux (Android/ARM)**, utilizando o runtime assíncrono do Tokio para gerenciar centenas de conexões simultâneas.
@@ -20,7 +20,7 @@ Integra-se nativamente com a **[Netwatch-API](https://github.com/LuizGrochevski/
 - 📡 Scanner **CIDR** para sub-redes inteiras
 - 🖥️ Descoberta de hosts ativos
 - 🔎 DNS reverso real via PTR (`--reverse-dns`)
-- 🛠️ Fingerprinting de serviços com **base de 40+ assinaturas**
+- 🛠️ Fingerprinting de serviços com **base de 64+ assinaturas**
 - 🔒 **TLS fingerprinting** — versão, cipher suite e informações de certificado
 - ⚙️ Controle de concorrência com workers e semáforos
 - ⏱️ Timeout configurável
@@ -45,7 +45,7 @@ Workers Concorrentes (Tokio)
    ├── TCP Connect Scan
    ├── SYN Scan (raw sockets)
    ├── UDP Scan
-   ├── Service Fingerprinting (40+ assinaturas)
+   ├── Service Fingerprinting (64+ assinaturas)
    └── TLS Fingerprinting (versão, cipher, certificado)
    ↓
 Structured Logging (tracing)
@@ -73,7 +73,11 @@ Resposta da API
 # Uso direto com --stdout
 ./sentinel-rs 192.168.0.1 -p 22,80,443 --stdout 2>/dev/null
 # Saída: [{"ip":"192.168.0.1","porta":80,"status":"Aberta (TCP)","servico":"HTTP","versao":null,"produto":null}]
-Quando o banner permite extração, produto e versao vêm preenchidos separadamente da string de exibição (servico), permitindo que consumidores montem keywords precisas para consulta de CVEs (ex: "OpenSSH 6.6.1p1"):
+```
+
+Quando o banner permite extração, `produto` e `versao` vêm preenchidos separadamente da string de exibição (`servico`), permitindo que consumidores montem keywords precisas para consulta de CVEs (ex: "OpenSSH 6.6.1p1"):
+
+```json
 {"servico":"SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13","versao":"6.6.1p1","produto":"OpenSSH"}
 ```
 
@@ -182,7 +186,7 @@ INFO Scan finalizado. target=192.168.0.1 total_portas_abertas=2
 
 ## 🔬 Service Signature Database
 
-O Sentinel-RS identifica serviços por banner com uma base de **40+ assinaturas** incluindo:
+O Sentinel-RS identifica serviços por banner com uma base de **64+ assinaturas** incluindo:
 
 | Categoria | Exemplos |
 |---|---|
@@ -191,6 +195,10 @@ O Sentinel-RS identifica serviços por banner com uma base de **40+ assinaturas*
 | FTP | vsftpd, ProFTPD, Pure-FTPd |
 | Mail | Postfix, Exim, Dovecot |
 | Databases | MySQL, PostgreSQL, MongoDB, Redis |
+| NoSQL/Other | CouchDB, Cassandra, InfluxDB, etcd, Memcached |
+| Message Brokers | RabbitMQ/AMQP, ActiveMQ, Mosquitto, NATS, Kafka |
+| IoT/Embedded | GoAhead, Boa, RomPager, uc-httpd, Hikvision, Dahua, BusyBox |
+| Monitoring | Zabbix, Grafana, Prometheus, Nagios NRPE |
 | Proxy | Squid, HAProxy, Varnish |
 | Runtimes | Node.js, Python, Ruby, ASP.NET |
 
@@ -232,11 +240,11 @@ cargo test
 test cli::tests                    7 testes  — argumentos CLI
 test models::tests                 6 testes  — vulnerabilidades e serialização
 test network::fingerprint::tests   3 testes  — detecção de serviços
-test network::signatures::tests    9 testes  — signature database
-test network::syn::tests           5 testes  — SYN scan
+test network::signatures::tests   18 testes  — signature database (64+ assinaturas)
+test network::syn::tests           9 testes  — SYN scan
 test network::tls::tests           3 testes  — TLS fingerprinting
 ────────────────────────────────────────────
-Total: 34 passed
+Total: 43 passed
 ```
 
 ---
@@ -245,7 +253,7 @@ Total: 34 passed
 
 - [x] Scanner TCP + UDP
 - [x] CIDR scanning
-- [x] Fingerprinting de serviços (40+ assinaturas)
+- [x] Fingerprinting de serviços (64+ assinaturas)
 - [x] DNS reverso via PTR
 - [x] Exportação JSON, CSV, YAML, XML, Markdown
 - [x] **Nmap XML** compatível
@@ -253,9 +261,9 @@ Total: 34 passed
 - [x] **Output `--stdout` para pipelines**
 - [x] **SYN Scan** (raw sockets)
 - [x] **TLS fingerprinting**
-- [x] 34 testes automatizados
+- [x] 43 testes automatizados
+- [x] **Service signature database expandida**
 - [ ] Fingerprinting avançado (UDP signatures)
-- [ ] Service signature database expandida
 - [ ] TLS fingerprinting JA3/JA4
 
 ---
