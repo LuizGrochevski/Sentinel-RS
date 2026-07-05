@@ -13,7 +13,8 @@ use clap::Parser;
                   sentinel-rs 192.168.0.1 -p 22,80,443\n  \
                   sentinel-rs 192.168.0.0/24 -p 1-1000 --reverse-dns\n  \
                   sentinel-rs 192.168.0.1 -p 80,443 --stdout 2>/dev/null\n  \
-                  sudo sentinel-rs 192.168.0.1 -p 22,80,443 --syn"
+                  sudo sentinel-rs 192.168.0.1 -p 22,80,443 --syn\n  \
+                  sentinel-rs 192.168.0.1 -p 53,161 --udp --no-ping"
 )]
 pub struct Cli {
     /// IP, hostname ou bloco CIDR alvo (ex: 192.168.0.1, 192.168.0.0/24)
@@ -54,6 +55,10 @@ pub struct Cli {
     /// Usa SYN scan via raw sockets — mais furtivo (requer root ou CAP_NET_RAW)
     #[arg(long = "syn")]
     pub syn: bool,
+
+    /// Pula o host discovery via ping (necessário em ambientes sem ICMP, como Termux) e trata todos os IPs do alvo como ativos
+    #[arg(long = "no-ping")]
+    pub no_ping: bool,
 }
 
 #[cfg(test)]
@@ -96,6 +101,12 @@ mod tests {
     }
 
     #[test]
+    fn test_flag_no_ping() {
+        let args = Cli::parse_from(["sentinel-rs", "192.168.0.1", "-p", "80", "--no-ping"]);
+        assert!(args.no_ping);
+    }
+
+    #[test]
     fn test_defaults() {
         let args = Cli::parse_from(["sentinel-rs", "10.0.0.1"]);
         assert_eq!(args.threads, 100);
@@ -104,6 +115,7 @@ mod tests {
         assert!(!args.stdout);
         assert!(!args.udp);
         assert!(!args.syn);
+        assert!(!args.no_ping);
     }
 
     #[test]

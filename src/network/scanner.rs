@@ -89,41 +89,46 @@ pub async fn executar_scan(
     log_out!(usar_stdout, "{} {}", "Total de portas por host:".cyan(), lista_portas.len().to_string().yellow());
     log_out!(usar_stdout, "{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
 
-    let semaforo_ping = Arc::new(Semaphore::new(64));
-    let ips_ativos_compartilhados = Arc::new(Mutex::new(Vec::new()));
-    let mut tarefas_ping = vec![];
-
-    let spinner_hosts = ProgressBar::new_spinner();
-    spinner_hosts.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg}")
-            .unwrap(),
-    );
-    spinner_hosts.set_message("Mapeando hosts ativos na rede em paralelo...".bright_black().to_string());
-    spinner_hosts.enable_steady_tick(Duration::from_millis(100));
-
     let args_proprio: Cli = (*args).clone();
     let args_compartilhado = Arc::new(args_proprio);
 
-    for ip in lista_ips {
-        let sem = Arc::clone(&semaforo_ping);
-        let ativos_clone = Arc::clone(&ips_ativos_compartilhados);
-        let ip_str = ip.to_string();
-        let timeout_ms = args_compartilhado.timeout;
+    let ips_encontrados: Vec<String> = if args_compartilhado.no_ping {
+        debug!("Flag --no-ping ativa: pulando host discovery, tratando todos os IPs como ativos.");
+        lista_ips.iter().map(|ip| ip.to_string()).collect()
+    } else {
+        let semaforo_ping = Arc::new(Semaphore::new(64));
+        let ips_ativos_compartilhados = Arc::new(Mutex::new(Vec::new()));
+        let mut tarefas_ping = vec![];
 
-        tarefas_ping.push(tokio::spawn(async move {
-            if let Ok(_guarda) = sem.acquire().await {
-                if verificar_host_ativo(&ip_str, timeout_ms).await {
-                    let mut ativos = ativos_clone.lock().await;
-                    ativos.push(ip_str);
+        let spinner_hosts = ProgressBar::new_spinner();
+        spinner_hosts.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        spinner_hosts.set_message("Mapeando hosts ativos na rede em paralelo...".bright_black().to_string());
+        spinner_hosts.enable_steady_tick(Duration::from_millis(100));
+
+        for ip in lista_ips {
+            let sem = Arc::clone(&semaforo_ping);
+            let ativos_clone = Arc::clone(&ips_ativos_compartilhados);
+            let ip_str = ip.to_string();
+            let timeout_ms = args_compartilhado.timeout;
+
+            tarefas_ping.push(tokio::spawn(async move {
+                if let Ok(_guarda) = sem.acquire().await {
+                    if verificar_host_ativo(&ip_str, timeout_ms).await {
+                        let mut ativos = ativos_clone.lock().await;
+                        ativos.push(ip_str);
+                    }
                 }
-            }
-        }));
-    }
+            }));
+        }
 
-    for t in tarefas_ping { let _ = t.await; }
+        for t in tarefas_ping { let _ = t.await; }
 
-    let ips_encontrados = {
+        spinner_hosts.finish_and_clear();
+
         let guard = ips_ativos_compartilhados.lock().await;
         guard.clone()
     };
@@ -131,10 +136,10 @@ pub async fn executar_scan(
     let mut mapeamento_hosts_completo = std::collections::HashMap::new();
 
     if args_compartilhado.reverse_dns {
-        spinner_hosts.set_message(
-            "Resolvendo hostnames dos alvos ativos em paralelo..."
-                .bright_black()
-                .to_string(),
+        log_out!(
+            usar_stdout,
+            "{}",
+            "Resolvendo hostnames dos alvos ativos em paralelo...".bright_black()
         );
 
         let mut tarefas_dns = vec![];
@@ -158,17 +163,11 @@ pub async fn executar_scan(
             mapeamento_hosts_completo.entry(ip.clone()).or_insert(None);
         }
     } else {
-        spinner_hosts.set_message(
-            "Reverse DNS desativado; usando IPs puros."
-                .bright_black()
-                .to_string(),
-        );
         for ip in &ips_encontrados {
             mapeamento_hosts_completo.insert(ip.clone(), None);
         }
     }
 
-    spinner_hosts.finish_and_clear();
     log_out!(
         usar_stdout,
         "🔍 Mapeamento concluído: {} hosts encontrados.",
@@ -241,12 +240,22 @@ pub async fn executar_scan(
                     )
                     .await;
 
-                    if resultado_udp != "Fechada"
-                        && !resultado_udp.contains("Falha")
-                        && !resultado_udp.contains("Erro")
-                    {
+                    let indisponivel = resultado_udp.status == "Fechada"
+                        || resultado_udp.status.contains("Falha")
+                        || resultado_udp.status.contains("Erro");
+
+                    if !indisponivel {
                         encontrou = true;
-                        servico_detectado = crate::network::fingerprint::montar_resultado(resultado_udp);
+                        let exibicao = match (&resultado_udp.servico, &resultado_udp.versao) {
+                            (Some(s), Some(v)) => format!("{} {}", s, v),
+                            (Some(s), None) => s.clone(),
+                            (None, _) => resultado_udp.status.clone(),
+                        };
+                        servico_detectado = crate::network::fingerprint::ServicoDetectado {
+                            exibicao,
+                            servico: resultado_udp.produto.clone(),
+                            versao: resultado_udp.versao.clone(),
+                        };
                     }
                 } else {
                     let mut conectado = false;
@@ -279,7 +288,6 @@ pub async fn executar_scan(
                         )
                         .await;
 
-                        // TLS fingerprinting em portas HTTPS
                         if trabalho.porta == 443 || trabalho.porta == 8443 {
                             if let Some(tls_info) = fingerprint_tls(
                                 &trabalho.ip,
