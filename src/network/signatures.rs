@@ -44,6 +44,37 @@ pub fn identificar_estruturado(banner: &str) -> (Option<String>, Option<String>,
         Assinatura { gatilho: "+PONG", nome: "Redis", categoria: "Database" },
         Assinatura { gatilho: "Elasticsearch", nome: "Elasticsearch", categoria: "Database" },
 
+        // NoSQL / Other DB
+        Assinatura { gatilho: "CouchDB", nome: "Apache CouchDB", categoria: "Database" },
+        Assinatura { gatilho: "Cassandra", nome: "Apache Cassandra", categoria: "Database" },
+        Assinatura { gatilho: "InfluxDB", nome: "InfluxDB", categoria: "Database" },
+        Assinatura { gatilho: "etcd", nome: "etcd", categoria: "Database" },
+        Assinatura { gatilho: "VERSION\r\n", nome: "Memcached", categoria: "Database" },
+
+        // Message Brokers
+        Assinatura { gatilho: "AMQP", nome: "RabbitMQ / AMQP Broker", categoria: "Message Broker" },
+        Assinatura { gatilho: "ActiveMQ", nome: "Apache ActiveMQ", categoria: "Message Broker" },
+        Assinatura { gatilho: "mosquitto", nome: "Mosquitto MQTT Broker", categoria: "Message Broker" },
+        Assinatura { gatilho: "NATS", nome: "NATS Server", categoria: "Message Broker" },
+        Assinatura { gatilho: "kafka", nome: "Apache Kafka", categoria: "Message Broker" },
+
+        // IoT / Embedded (comuns em roteadores, câmeras — alvos clássicos de botnet)
+        Assinatura { gatilho: "RTSP/1.0", nome: "RTSP Stream Server", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "GoAhead-Webs", nome: "GoAhead Embedded HTTPD", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "Boa/", nome: "Boa Embedded HTTPD", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "RomPager", nome: "RomPager (embedded, frequentemente vulnerável)", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "uc-httpd", nome: "uc-httpd (DVR/câmera)", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "lighttpd", nome: "Lighttpd", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "Hikvision", nome: "Hikvision Device", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "Dahua", nome: "Dahua Device", categoria: "IoT/Embedded" },
+        Assinatura { gatilho: "BusyBox", nome: "BusyBox (Linux embarcado)", categoria: "IoT/Embedded" },
+
+        // Monitoring
+        Assinatura { gatilho: "Zabbix", nome: "Zabbix", categoria: "Monitoring" },
+        Assinatura { gatilho: "Grafana", nome: "Grafana", categoria: "Monitoring" },
+        Assinatura { gatilho: "Prometheus", nome: "Prometheus", categoria: "Monitoring" },
+        Assinatura { gatilho: "NRPE", nome: "Nagios NRPE", categoria: "Monitoring" },
+
         // Proxy / Load Balancer
         Assinatura { gatilho: "Squid/", nome: "Squid Proxy", categoria: "Proxy" },
         Assinatura { gatilho: "HAProxy", nome: "HAProxy", categoria: "Load Balancer" },
@@ -163,5 +194,40 @@ mod tests {
     fn test_case_insensitive() {
         let resultado = identificar_por_banner("SERVER: NGINX/1.20.0");
         assert!(resultado.is_some());
+    }
+
+    #[test]
+    fn test_identificar_goahead() {
+        let resultado = identificar_por_banner("Server: GoAhead-Webs");
+        assert!(resultado.is_some());
+        assert!(resultado.unwrap().contains("GoAhead"));
+    }
+
+    #[test]
+    fn test_identificar_rompager() {
+        let resultado = identificar_por_banner("Server: RomPager/4.07 UPnP/1.0");
+        assert!(resultado.is_some());
+        assert!(resultado.unwrap().contains("RomPager"));
+    }
+
+    #[test]
+    fn test_identificar_mosquitto() {
+        let resultado = identificar_por_banner("mosquitto version 2.0.15");
+        assert!(resultado.is_some());
+        assert!(resultado.unwrap().contains("Mosquitto"));
+    }
+
+    #[test]
+    fn test_identificar_zabbix() {
+        let resultado = identificar_por_banner("ZBXD Zabbix Agent");
+        assert!(resultado.is_some());
+        assert!(resultado.unwrap().contains("Zabbix"));
+    }
+
+    #[test]
+    fn test_identificar_hikvision() {
+        let resultado = identificar_por_banner("Server: App-webs/Hikvision");
+        assert!(resultado.is_some());
+        assert!(resultado.unwrap().contains("Hikvision"));
     }
 }
