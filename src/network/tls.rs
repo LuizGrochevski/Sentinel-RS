@@ -6,6 +6,8 @@ use rustls_pki_types::ServerName;
 use std::sync::Arc;
 use tracing::debug;
 
+use crate::network::ja3::{fingerprint_ja3s, Ja3sInfo};
+
 #[derive(Debug, Clone)]
 pub struct TlsInfo {
     pub versao: String,
@@ -15,6 +17,7 @@ pub struct TlsInfo {
     pub certificado_emissor: Option<String>,
     pub certificado_valido_ate: Option<String>,
     pub certificado_expirado: bool,
+    pub ja3s: Option<Ja3sInfo>,
 }
 
 impl TlsInfo {
@@ -36,6 +39,10 @@ impl TlsInfo {
             partes.push(format!("expira={}", valido_ate));
         }
 
+        if let Some(ja3s) = &self.ja3s {
+            partes.push(format!("JA3S={}", ja3s.hash));
+        }
+
         partes.join(" | ")
     }
 }
@@ -43,6 +50,10 @@ impl TlsInfo {
 pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<TlsInfo> {
     let endereco = format!("{}:{}", ip, porta);
     let d_timeout = Duration::from_millis(timeout_ms);
+
+    // JA3S usa handshake cru numa conexão própria, roda em paralelo
+    // com o handshake rustls abaixo pra não duplicar o custo de RTT.
+    let ja3s_fut = fingerprint_ja3s(ip, porta, timeout_ms);
 
     let fluxo = match timeout(d_timeout, TcpStream::connect(&endereco)).await {
         Ok(Ok(f)) => f,
@@ -153,12 +164,15 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
         }
     }
 
+    let ja3s = ja3s_fut.await;
+
     debug!(
         ip,
         porta,
         versao = %versao,
         cipher = %cipher_suite,
         cn = ?certificado_cn,
+        ja3s = ?ja3s.as_ref().map(|j| &j.hash),
         "TLS fingerprint concluído."
     );
 
@@ -170,6 +184,7 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
         certificado_emissor,
         certificado_valido_ate,
         certificado_expirado,
+        ja3s,
     })
 }
 
@@ -208,8 +223,16 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
     fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
         vec![
             tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA384,
+            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA512,
             tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA256,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA384,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA512,
             tokio_rustls::rustls::SignatureScheme::ED25519,
+            tokio_rustls::rustls::SignatureScheme::ED448,
         ]
     }
 }
@@ -218,9 +241,8 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_tls_info_resumo_basico() {
-        let info = TlsInfo {
+    fn info_base() -> TlsInfo {
+        TlsInfo {
             versao: "1.3".to_string(),
             cipher_suite: "TLS_AES_256_GCM_SHA384".to_string(),
             certificado_cn: Some("example.com".to_string()),
@@ -228,7 +250,13 @@ mod tests {
             certificado_emissor: Some("Let's Encrypt".to_string()),
             certificado_valido_ate: Some("2025-12-31".to_string()),
             certificado_expirado: false,
-        };
+            ja3s: None,
+        }
+    }
+
+    #[test]
+    fn test_tls_info_resumo_basico() {
+        let info = info_base();
         let resumo = info.resumo();
         assert!(resumo.contains("TLS/1.3"));
         assert!(resumo.contains("example.com"));
@@ -238,15 +266,15 @@ mod tests {
 
     #[test]
     fn test_tls_info_expirado() {
-        let info = TlsInfo {
-            versao: "1.2".to_string(),
-            cipher_suite: "TLS_RSA_WITH_AES_128_CBC_SHA".to_string(),
-            certificado_cn: Some("old.example.com".to_string()),
-            certificado_sans: vec![],
-            certificado_emissor: None,
-            certificado_valido_ate: Some("2020-01-01".to_string()),
-            certificado_expirado: true,
-        };
+        let mut info = info_base();
+        info.versao = "1.2".to_string();
+        info.cipher_suite = "TLS_RSA_WITH_AES_128_CBC_SHA".to_string();
+        info.certificado_cn = Some("old.example.com".to_string());
+        info.certificado_sans = vec![];
+        info.certificado_emissor = None;
+        info.certificado_valido_ate = Some("2020-01-01".to_string());
+        info.certificado_expirado = true;
+
         let resumo = info.resumo();
         assert!(resumo.contains("EXPIRADO"));
         assert!(resumo.contains("TLS/1.2"));
@@ -254,17 +282,28 @@ mod tests {
 
     #[test]
     fn test_tls_info_sem_cn() {
-        let info = TlsInfo {
-            versao: "1.3".to_string(),
-            cipher_suite: "TLS_AES_128_GCM_SHA256".to_string(),
-            certificado_cn: None,
-            certificado_sans: vec![],
-            certificado_emissor: None,
-            certificado_valido_ate: None,
-            certificado_expirado: false,
-        };
+        let mut info = info_base();
+        info.certificado_cn = None;
+        info.certificado_sans = vec![];
+        info.certificado_emissor = None;
+        info.certificado_valido_ate = None;
+        info.certificado_expirado = false;
+
         let resumo = info.resumo();
         assert!(resumo.contains("TLS/1.3"));
         assert!(!resumo.contains("CN="));
+    }
+
+    #[test]
+    fn test_tls_info_com_ja3s() {
+        let mut info = info_base();
+        info.ja3s = Some(Ja3sInfo {
+            hash: "abc123def456".to_string(),
+            versao_tls: 0x0303,
+            cipher: 0x1301,
+            extensoes: vec![0x0000, 0x002b],
+        });
+        let resumo = info.resumo();
+        assert!(resumo.contains("JA3S=abc123def456"));
     }
 }
