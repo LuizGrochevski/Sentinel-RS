@@ -3,7 +3,7 @@
 ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
 ![Tokio](https://img.shields.io/badge/Tokio-async-blue?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Android%20(Termux)-green?style=for-the-badge)
-![Tests](https://img.shields.io/badge/Tests-43%20passing-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-54%20passing-brightgreen?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Educational-orange?style=for-the-badge)
 
 Sentinel-RS é uma ferramenta de network scanning desenvolvida em **Rust** com foco em concorrência assíncrona, performance e segurança. Arquitetada para rodar de forma eficiente inclusive em ambientes móveis via **Termux (Android/ARM)**, utilizando o runtime assíncrono do Tokio para gerenciar centenas de conexões simultâneas.
@@ -243,8 +243,9 @@ test network::fingerprint::tests   3 testes  — detecção de serviços
 test network::signatures::tests   18 testes  — signature database (64+ assinaturas)
 test network::syn::tests           9 testes  — SYN scan
 test network::tls::tests           3 testes  — TLS fingerprinting
+test network::udp::tests          10 testes  — UDP fingerprinting estruturado
 ────────────────────────────────────────────
-Total: 43 passed
+Total: 54 passed
 ```
 
 ---
@@ -261,9 +262,9 @@ Total: 43 passed
 - [x] **Output `--stdout` para pipelines**
 - [x] **SYN Scan** (raw sockets)
 - [x] **TLS fingerprinting**
-- [x] 43 testes automatizados
+- [x] 54 testes automatizados
 - [x] **Service signature database expandida**
-- [ ] Fingerprinting avançado (UDP signatures)
+- [x] **Fingerprinting avançado (UDP signatures)** — SNMP, NetBIOS, SSDP/UPnP, mDNS, TFTP
 - [ ] TLS fingerprinting JA3/JA4
 
 ---
