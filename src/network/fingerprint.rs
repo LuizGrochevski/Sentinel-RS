@@ -57,8 +57,16 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
     fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
         vec![
             tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA384,
+            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA512,
             tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA256,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA384,
+            tokio_rustls::rustls::SignatureScheme::RSA_PSS_SHA512,
             tokio_rustls::rustls::SignatureScheme::ED25519,
+            tokio_rustls::rustls::SignatureScheme::ED448,
         ]
     }
 }
@@ -135,7 +143,22 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
 
             if let Ok(nome_servidor) = ServerName::try_from(ip) {
                 let nome_estatico: ServerName<'static> = nome_servidor.to_owned();
-                if let Ok(Ok(mut fluxo_tls)) = timeout(d_timeout, conector.connect(nome_estatico, fluxo)).await {
+                let timeout_handshake = Duration::from_millis(timeout_ms * 3);
+                let resultado_handshake = timeout(timeout_handshake, conector.connect(nome_estatico, fluxo)).await;
+
+                let fluxo_tls_opt = match resultado_handshake {
+                    Err(_) => {
+                        tracing::debug!(ip, porta, "Handshake TLS (fingerprint.rs) estourou o timeout de {}ms.", timeout_handshake.as_millis());
+                        None
+                    }
+                    Ok(Err(e)) => {
+                        tracing::debug!(ip, porta, erro = %e, "Handshake TLS (fingerprint.rs) falhou com erro.");
+                        None
+                    }
+                    Ok(Ok(f)) => Some(f),
+                };
+
+                if let Some(mut fluxo_tls) = fluxo_tls_opt {
 
                     let requisicao = format!(
                         "HEAD / HTTP/1.1\r\n\
