@@ -28,8 +28,9 @@ pub struct Cli {
     #[arg(short = 't', long = "threads", default_value = "100")]
     pub threads: usize,
 
-    /// Timeout em milissegundos por conexão
-    #[arg(long, default_value_t = 100)]
+    /// Timeout em milissegundos por conexão (padrão otimizado para LAN;
+    /// para alvos externos/WAN, considere 1000ms ou mais)
+    #[arg(long, default_value_t = 300)]
     pub timeout: u64,
 
     /// Número de tentativas por porta antes de desistir
@@ -110,7 +111,7 @@ mod tests {
     fn test_defaults() {
         let args = Cli::parse_from(["sentinel-rs", "10.0.0.1"]);
         assert_eq!(args.threads, 100);
-        assert_eq!(args.timeout, 100);
+        assert_eq!(args.timeout, 300);
         assert_eq!(args.retries, 1);
         assert!(!args.stdout);
         assert!(!args.udp);
