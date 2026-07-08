@@ -244,18 +244,30 @@ pub async fn executar_scan(
                         || resultado_udp.status.contains("Falha")
                         || resultado_udp.status.contains("Erro");
 
+                    // Só reportamos "aberta confirmada" quando o probe obteve uma
+                    // resposta identificável. Timeout sem resposta é ambíguo em UDP
+                    // (pode ser aberta OU filtrada) e não deve virar uma linha "ABERTA"
+                    // — mesmo critério adotado pelo Nmap (estado open|filtered, não
+                    // impresso como certeza de porta aberta).
                     if !indisponivel {
-                        encontrou = true;
-                        let exibicao = match (&resultado_udp.servico, &resultado_udp.versao) {
-                            (Some(s), Some(v)) => format!("{} {}", s, v),
-                            (Some(s), None) => s.clone(),
-                            (None, _) => resultado_udp.status.clone(),
-                        };
-                        servico_detectado = crate::network::fingerprint::ServicoDetectado {
-                            exibicao,
-                            servico: resultado_udp.produto.clone(),
-                            versao: resultado_udp.versao.clone(),
-                        };
+                        if let Some(servico) = &resultado_udp.servico {
+                            encontrou = true;
+                            let exibicao = match &resultado_udp.versao {
+                                Some(v) => format!("{} {}", servico, v),
+                                None => servico.clone(),
+                            };
+                            servico_detectado = crate::network::fingerprint::ServicoDetectado {
+                                exibicao,
+                                servico: resultado_udp.produto.clone(),
+                                versao: resultado_udp.versao.clone(),
+                            };
+                        } else {
+                            debug!(
+                                ip = %trabalho.ip,
+                                porta = trabalho.porta,
+                                "UDP ambígua (sem resposta ao probe) — não reportada como aberta confirmada."
+                            );
+                        }
                     }
                 } else {
                     let mut conectado = false;
