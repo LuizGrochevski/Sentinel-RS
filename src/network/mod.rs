@@ -1,12 +1,12 @@
-pub mod ping;
+pub mod dns;
 pub mod fingerprint;
+pub mod ping;
 pub mod scanner;
 pub mod udp;
-pub mod dns; 
 
 pub use scanner::executar_scan;
 
-pub mod signatures;
-pub mod tls;
-pub mod syn;
 pub mod ja3;
+pub mod signatures;
+pub mod syn;
+pub mod tls;

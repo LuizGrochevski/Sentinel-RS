@@ -1,12 +1,12 @@
-use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
-use tokio_rustls::TlsConnector;
 use rustls_pki_types::ServerName;
 use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio::time::{Duration, timeout};
+use tokio_rustls::TlsConnector;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tracing::debug;
 
-use crate::network::ja3::{fingerprint_ja3s, Ja3sInfo};
+use crate::network::ja3::{Ja3sInfo, fingerprint_ja3s};
 
 #[derive(Debug, Clone)]
 pub struct TlsInfo {
@@ -73,7 +73,9 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
         .with_root_certificates(raizes)
         .with_no_client_auth();
 
-    config.dangerous().set_certificate_verifier(Arc::new(VerificadorInseguro));
+    config
+        .dangerous()
+        .set_certificate_verifier(Arc::new(VerificadorInseguro));
 
     let conector = TlsConnector::from(Arc::new(config));
 
@@ -97,7 +99,12 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
 
     let versao = sessao
         .protocol_version()
-        .map(|v| format!("{:?}", v).replace("TLSv1_", "1.").replace("TLSv1_3", "1.3").replace("TLSv1_2", "1.2"))
+        .map(|v| {
+            format!("{:?}", v)
+                .replace("TLSv1_", "1.")
+                .replace("TLSv1_3", "1.3")
+                .replace("TLSv1_2", "1.2")
+        })
         .unwrap_or_else(|| "Desconhecida".to_string());
 
     let cipher_suite = sessao
@@ -118,7 +125,8 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
                 for rdn in cert.subject().iter() {
                     for attr in rdn.iter() {
                         if attr.attr_type().to_string() == "2.5.4.3" {
-                            certificado_cn = Some(attr.attr_value().as_str().unwrap_or("").to_string());
+                            certificado_cn =
+                                Some(attr.attr_value().as_str().unwrap_or("").to_string());
                         }
                     }
                 }
@@ -127,7 +135,8 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
                 for rdn in cert.issuer().iter() {
                     for attr in rdn.iter() {
                         if attr.attr_type().to_string() == "2.5.4.3" {
-                            certificado_emissor = Some(attr.attr_value().as_str().unwrap_or("").to_string());
+                            certificado_emissor =
+                                Some(attr.attr_value().as_str().unwrap_or("").to_string());
                         }
                     }
                 }
@@ -198,7 +207,8 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls_pki_types::UnixTime,
-    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error> {
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error>
+    {
         Ok(tokio_rustls::rustls::client::danger::ServerCertVerified::assertion())
     }
 
@@ -207,7 +217,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
@@ -216,7 +229,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 

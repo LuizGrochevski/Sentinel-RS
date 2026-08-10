@@ -14,8 +14,8 @@ use tracing::{debug, warn};
 use crate::cli::Cli;
 use crate::models::{ResultadoPorta, TrabalhoScan};
 use crate::network::fingerprint::detectar_servico;
-use crate::network::tls::fingerprint_tls;
 use crate::network::ping::verificar_host_ativo;
+use crate::network::tls::fingerprint_tls;
 
 macro_rules! log_out {
     ($stdout:expr, $($arg:tt)*) => {
@@ -38,18 +38,28 @@ pub async fn executar_scan(
 
     for parte in args.ports.split(',') {
         let parte_limpa = parte.trim();
-        if parte_limpa.is_empty() { continue; }
+        if parte_limpa.is_empty() {
+            continue;
+        }
 
         if parte_limpa.contains('-') {
             let intervalo: Vec<&str> = parte_limpa.split('-').collect();
             if intervalo.len() != 2 {
                 anyhow::bail!("Formato de intervalo de portas inválido: {}", parte_limpa);
             }
-            let inicio: u16 = intervalo[0].parse().context("Porta inicial inválida no intervalo")?;
-            let fim: u16 = intervalo[1].parse().context("Porta final inválida no intervalo")?;
+            let inicio: u16 = intervalo[0]
+                .parse()
+                .context("Porta inicial inválida no intervalo")?;
+            let fim: u16 = intervalo[1]
+                .parse()
+                .context("Porta final inválida no intervalo")?;
 
             if inicio > fim {
-                anyhow::bail!("A porta inicial {} não pode ser maior que a final {}!", inicio, fim);
+                anyhow::bail!(
+                    "A porta inicial {} não pode ser maior que a final {}!",
+                    inicio,
+                    fim
+                );
             }
             for p in inicio..=fim {
                 lista_portas.push(p);
@@ -80,14 +90,43 @@ pub async fn executar_scan(
 
     let resultados_compartilhados = Arc::new(Mutex::new(Vec::new()));
 
-    let protocolo_texto = if args.udp { "UDP (Datagramas)" } else { "TCP (Conexões)" };
+    let protocolo_texto = if args.udp {
+        "UDP (Datagramas)"
+    } else {
+        "TCP (Conexões)"
+    };
 
     log_out!(usar_stdout, "{}", "🛡 Sentinel-RS iniciado!".blue().bold());
-    log_out!(usar_stdout, "{} {}", "Protocolo:".cyan(), protocolo_texto.yellow());
-    log_out!(usar_stdout, "{} {}", "Alvo especificado:".cyan(), args.target);
-    log_out!(usar_stdout, "{} {}", "Total de IPs para analisar:".cyan(), lista_ips.len().to_string().yellow());
-    log_out!(usar_stdout, "{} {}", "Total de portas por host:".cyan(), lista_portas.len().to_string().yellow());
-    log_out!(usar_stdout, "{} {} conexões simultâneas\n", "Concorrência máxima:".cyan(), limite_threads.to_string().yellow());
+    log_out!(
+        usar_stdout,
+        "{} {}",
+        "Protocolo:".cyan(),
+        protocolo_texto.yellow()
+    );
+    log_out!(
+        usar_stdout,
+        "{} {}",
+        "Alvo especificado:".cyan(),
+        args.target
+    );
+    log_out!(
+        usar_stdout,
+        "{} {}",
+        "Total de IPs para analisar:".cyan(),
+        lista_ips.len().to_string().yellow()
+    );
+    log_out!(
+        usar_stdout,
+        "{} {}",
+        "Total de portas por host:".cyan(),
+        lista_portas.len().to_string().yellow()
+    );
+    log_out!(
+        usar_stdout,
+        "{} {} conexões simultâneas\n",
+        "Concorrência máxima:".cyan(),
+        limite_threads.to_string().yellow()
+    );
 
     let args_proprio: Cli = (*args).clone();
     let args_compartilhado = Arc::new(args_proprio);
@@ -106,7 +145,11 @@ pub async fn executar_scan(
                 .template("{spinner:.cyan} {msg}")
                 .unwrap(),
         );
-        spinner_hosts.set_message("Mapeando hosts ativos na rede em paralelo...".bright_black().to_string());
+        spinner_hosts.set_message(
+            "Mapeando hosts ativos na rede em paralelo..."
+                .bright_black()
+                .to_string(),
+        );
         spinner_hosts.enable_steady_tick(Duration::from_millis(100));
 
         for ip in lista_ips {
@@ -125,7 +168,9 @@ pub async fn executar_scan(
             }));
         }
 
-        for t in tarefas_ping { let _ = t.await; }
+        for t in tarefas_ping {
+            let _ = t.await;
+        }
 
         spinner_hosts.finish_and_clear();
 
@@ -305,8 +350,14 @@ pub async fn executar_scan(
                                 &trabalho.ip,
                                 trabalho.porta,
                                 args_worker_clone.timeout * 3,
-                            ).await {
-                                servico_detectado.exibicao = format!("{} | {}", servico_detectado.exibicao, tls_info.resumo());
+                            )
+                            .await
+                            {
+                                servico_detectado.exibicao = format!(
+                                    "{} | {}",
+                                    servico_detectado.exibicao,
+                                    tls_info.resumo()
+                                );
                             }
                         }
                     }
@@ -319,7 +370,10 @@ pub async fn executar_scan(
                     pb.suspend(|| {
                         let alerta = format!(
                             "[+] Alvo {} | Porta {}/{} ABERTA | Status/Serviço: {}",
-                            alvo_exibicao, trabalho.porta, protocolo_tag, servico_detectado.exibicao
+                            alvo_exibicao,
+                            trabalho.porta,
+                            protocolo_tag,
+                            servico_detectado.exibicao
                         );
 
                         if usar_stdout_worker {

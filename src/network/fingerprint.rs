@@ -1,12 +1,12 @@
 use crate::network::signatures::identificar_estruturado;
-use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
-use tokio_rustls::TlsConnector;
+use anyhow::Result;
 use rustls_pki_types::ServerName;
 use std::sync::Arc;
-use anyhow::Result;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::time::{Duration, timeout};
+use tokio_rustls::TlsConnector;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
 fn nome_padrao_porta(porta: u16) -> String {
     // Fallback por porta conhecida
@@ -32,7 +32,8 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls_pki_types::UnixTime,
-    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error> {
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error>
+    {
         Ok(tokio_rustls::rustls::client::danger::ServerCertVerified::assertion())
     }
 
@@ -41,7 +42,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
@@ -50,7 +54,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for VerificadorIns
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
@@ -79,10 +86,19 @@ pub struct ServicoDetectado {
 
 pub fn montar_resultado(exibicao: String) -> ServicoDetectado {
     let (servico, versao, _categoria) = identificar_estruturado(&exibicao);
-    ServicoDetectado { exibicao, servico, versao }
+    ServicoDetectado {
+        exibicao,
+        servico,
+        versao,
+    }
 }
 
-pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeout_ms: u64) -> ServicoDetectado {
+pub async fn detectar_servico(
+    porta: u16,
+    ip: &str,
+    fluxo: &mut TcpStream,
+    timeout_ms: u64,
+) -> ServicoDetectado {
     let mut buffer = [0; 256];
     let d_timeout = Duration::from_millis(timeout_ms);
 
@@ -93,9 +109,14 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
                         let banner = resposta["220".len()..].trim();
-                        return montar_resultado(format!("FTP -> {}", banner.lines().next().unwrap_or("")));
+                        return montar_resultado(format!(
+                            "FTP -> {}",
+                            banner.lines().next().unwrap_or("")
+                        ));
                     }
-                    return montar_resultado(resposta.lines().next().unwrap_or("FTP").trim().to_string());
+                    return montar_resultado(
+                        resposta.lines().next().unwrap_or("FTP").trim().to_string(),
+                    );
                 }
             }
             montar_resultado("FTP (Sem Banner)".to_string())
@@ -105,7 +126,9 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 0 {
                     let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    return montar_resultado(banner.lines().next().unwrap_or("SSH").trim().to_string());
+                    return montar_resultado(
+                        banner.lines().next().unwrap_or("SSH").trim().to_string(),
+                    );
                 }
             }
             montar_resultado("SSH (Sem Banner)".to_string())
@@ -117,9 +140,14 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.starts_with("220") {
                         let banner = resposta["220".len()..].trim();
-                        return montar_resultado(format!("SMTP -> {}", banner.lines().next().unwrap_or("")));
+                        return montar_resultado(format!(
+                            "SMTP -> {}",
+                            banner.lines().next().unwrap_or("")
+                        ));
                     }
-                    return montar_resultado(resposta.lines().next().unwrap_or("SMTP").trim().to_string());
+                    return montar_resultado(
+                        resposta.lines().next().unwrap_or("SMTP").trim().to_string(),
+                    );
                 }
             }
             montar_resultado("SMTP (Sem Banner)".to_string())
@@ -137,18 +165,26 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                 .with_root_certificates(raizes)
                 .with_no_client_auth();
 
-            config.dangerous().set_certificate_verifier(Arc::new(VerificadorInseguro));
+            config
+                .dangerous()
+                .set_certificate_verifier(Arc::new(VerificadorInseguro));
 
             let conector = TlsConnector::from(Arc::new(config));
 
             if let Ok(nome_servidor) = ServerName::try_from(ip) {
                 let nome_estatico: ServerName<'static> = nome_servidor.to_owned();
                 let timeout_handshake = Duration::from_millis(timeout_ms * 3);
-                let resultado_handshake = timeout(timeout_handshake, conector.connect(nome_estatico, fluxo)).await;
+                let resultado_handshake =
+                    timeout(timeout_handshake, conector.connect(nome_estatico, fluxo)).await;
 
                 let fluxo_tls_opt = match resultado_handshake {
                     Err(_) => {
-                        tracing::debug!(ip, porta, "Handshake TLS (fingerprint.rs) estourou o timeout de {}ms.", timeout_handshake.as_millis());
+                        tracing::debug!(
+                            ip,
+                            porta,
+                            "Handshake TLS (fingerprint.rs) estourou o timeout de {}ms.",
+                            timeout_handshake.as_millis()
+                        );
                         None
                     }
                     Ok(Err(e)) => {
@@ -159,7 +195,6 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                 };
 
                 if let Some(mut fluxo_tls) = fluxo_tls_opt {
-
                     let requisicao = format!(
                         "HEAD / HTTP/1.1\r\n\
                          Host: {}\r\n\
@@ -169,7 +204,9 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                     );
 
                     if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok() {
-                        if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo_tls.read(&mut buffer)).await {
+                        if let Ok(Ok(bytes_lidos)) =
+                            timeout(d_timeout, fluxo_tls.read(&mut buffer)).await
+                        {
                             if bytes_lidos > 0 {
                                 let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                                 let status_line = resposta.lines().next().unwrap_or("").trim();
@@ -177,13 +214,17 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                                 let mut banner_servidor = String::new();
                                 for linha in resposta.lines() {
                                     if linha.to_lowercase().starts_with("server:") {
-                                        banner_servidor = linha["server:".len()..].trim().to_string();
+                                        banner_servidor =
+                                            linha["server:".len()..].trim().to_string();
                                         break;
                                     }
                                 }
 
                                 if !banner_servidor.is_empty() {
-                                    return montar_resultado(format!("HTTPS ({}) -> Servidor: {}", status_line, banner_servidor));
+                                    return montar_resultado(format!(
+                                        "HTTPS ({}) -> Servidor: {}",
+                                        status_line, banner_servidor
+                                    ));
                                 } else if !status_line.is_empty() {
                                     return montar_resultado(format!("HTTPS ({})", status_line));
                                 }
@@ -202,10 +243,19 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                 if bytes_lidos > 5 {
                     let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
-                    if resposta.contains("mysql") || resposta.contains("MariaDB") || !resposta.is_empty() {
+                    if resposta.contains("mysql")
+                        || resposta.contains("MariaDB")
+                        || !resposta.is_empty()
+                    {
                         let versao = resposta.lines().next().unwrap_or("MySQL").trim();
-                        let versao_limpa: String = versao.chars().filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c)).collect();
-                        return montar_resultado(format!("MySQL/MariaDB ({})", versao_limpa.trim()));
+                        let versao_limpa: String = versao
+                            .chars()
+                            .filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c))
+                            .collect();
+                        return montar_resultado(format!(
+                            "MySQL/MariaDB ({})",
+                            versao_limpa.trim()
+                        ));
                     }
                 }
             }
@@ -235,7 +285,8 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
             );
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
                 let timeout_leitura = Duration::from_millis(std::cmp::min(timeout_ms, 100));
-                if let Ok(Ok(bytes_lidos)) = timeout(timeout_leitura, fluxo.read(&mut buffer)).await {
+                if let Ok(Ok(bytes_lidos)) = timeout(timeout_leitura, fluxo.read(&mut buffer)).await
+                {
                     if bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                         let primeira_linha = banner.lines().next().unwrap_or("").trim();
@@ -249,9 +300,15 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
                                 }
                             }
                             if !banner_servidor.is_empty() {
-                                return montar_resultado(format!("HTTP/Serviço Web ({}) -> Servidor: {}", primeira_linha, banner_servidor));
+                                return montar_resultado(format!(
+                                    "HTTP/Serviço Web ({}) -> Servidor: {}",
+                                    primeira_linha, banner_servidor
+                                ));
                             }
-                            return montar_resultado(format!("HTTP/Serviço Web ({})", primeira_linha));
+                            return montar_resultado(format!(
+                                "HTTP/Serviço Web ({})",
+                                primeira_linha
+                            ));
                         }
 
                         if !primeira_linha.is_empty() {
@@ -264,7 +321,6 @@ pub async fn detectar_servico(porta: u16, ip: &str, fluxo: &mut TcpStream, timeo
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

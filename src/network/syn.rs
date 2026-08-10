@@ -1,10 +1,8 @@
 use pnet::datalink;
+use pnet::packet::Packet;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::tcp::{MutableTcpPacket, TcpFlags, TcpPacket};
-use pnet::packet::Packet;
-use pnet::transport::{
-    self, TransportChannelType, TransportProtocol,
-};
+use pnet::transport::{self, TransportChannelType, TransportProtocol};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
@@ -57,9 +55,7 @@ pub struct ResultadoSyn {
 pub fn verificar_permissao_raw_socket() -> bool {
     match transport::transport_channel(
         1024,
-        TransportChannelType::Layer4(TransportProtocol::Ipv4(
-            IpNextHeaderProtocols::Tcp,
-        )),
+        TransportChannelType::Layer4(TransportProtocol::Ipv4(IpNextHeaderProtocols::Tcp)),
     ) {
         Ok(_) => true,
         Err(_) => false,
@@ -83,11 +79,7 @@ fn obter_ip_local() -> Option<Ipv4Addr> {
 }
 
 /// Calcula checksum TCP
-fn calcular_checksum_tcp(
-    src_ip: Ipv4Addr,
-    dst_ip: Ipv4Addr,
-    tcp_packet: &[u8],
-) -> u16 {
+fn calcular_checksum_tcp(src_ip: Ipv4Addr, dst_ip: Ipv4Addr, tcp_packet: &[u8]) -> u16 {
     let src = src_ip.octets();
     let dst = dst_ip.octets();
     let mut soma: u32 = 0;
@@ -118,16 +110,15 @@ fn calcular_checksum_tcp(
 }
 
 /// Executa SYN scan em um único target/porta
-pub async fn syn_scan_porta(
-    dst_ip: Ipv4Addr,
-    porta: u16,
-    timeout_ms: u64,
-) -> ResultadoSyn {
+pub async fn syn_scan_porta(dst_ip: Ipv4Addr, porta: u16, timeout_ms: u64) -> ResultadoSyn {
     let src_ip = match obter_ip_local() {
         Some(ip) => ip,
         None => {
             warn!("Não foi possível determinar o IP local para SYN scan.");
-            return ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada };
+            return ResultadoSyn {
+                porta,
+                estado: EstadoPortaSyn::Filtrada,
+            };
         }
     };
 
@@ -139,14 +130,15 @@ pub async fn syn_scan_porta(
     // Abre canal de transporte raw
     let (mut tx, mut rx) = match transport::transport_channel(
         65535,
-        TransportChannelType::Layer4(TransportProtocol::Ipv4(
-            IpNextHeaderProtocols::Tcp,
-        )),
+        TransportChannelType::Layer4(TransportProtocol::Ipv4(IpNextHeaderProtocols::Tcp)),
     ) {
         Ok(c) => c,
         Err(e) => {
             warn!(error = %e, "Falha ao abrir raw socket. Execute como root.");
-            return ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada };
+            return ResultadoSyn {
+                porta,
+                estado: EstadoPortaSyn::Filtrada,
+            };
         }
     };
 
@@ -167,12 +159,12 @@ pub async fn syn_scan_porta(
     }
 
     let dst_addr = IpAddr::V4(dst_ip);
-    if let Err(e) = tx.send_to(
-        TcpPacket::new(&tcp_buffer).unwrap(),
-        dst_addr,
-    ) {
+    if let Err(e) = tx.send_to(TcpPacket::new(&tcp_buffer).unwrap(), dst_addr) {
         warn!(error = %e, porta, "Falha ao enviar pacote SYN.");
-        return ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada };
+        return ResultadoSyn {
+            porta,
+            estado: EstadoPortaSyn::Filtrada,
+        };
     }
 
     debug!(ip = %dst_ip, porta, src_porta, "Pacote SYN enviado.");
@@ -184,7 +176,10 @@ pub async fn syn_scan_porta(
     loop {
         if std::time::Instant::now() > deadline {
             debug!(porta, "Timeout aguardando resposta SYN.");
-            return ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada };
+            return ResultadoSyn {
+                porta,
+                estado: EstadoPortaSyn::Filtrada,
+            };
         }
 
         match iter.next_with_timeout(Duration::from_millis(100)) {
@@ -219,13 +214,19 @@ pub async fn syn_scan_porta(
                     let checksum = calcular_checksum_tcp(src_ip, dst_ip, rst.packet());
                     rst.set_checksum(checksum);
                     let _ = tx.send_to(TcpPacket::new(&rst_buffer).unwrap(), IpAddr::V4(dst_ip));
-                    return ResultadoSyn { porta, estado: EstadoPortaSyn::Aberta };
+                    return ResultadoSyn {
+                        porta,
+                        estado: EstadoPortaSyn::Aberta,
+                    };
                 }
 
                 // RST = porta fechada
                 if flags & TcpFlags::RST != 0 {
                     debug!(porta, "Recebido RST — porta fechada.");
-                    return ResultadoSyn { porta, estado: EstadoPortaSyn::Fechada };
+                    return ResultadoSyn {
+                        porta,
+                        estado: EstadoPortaSyn::Fechada,
+                    };
                 }
             }
             Ok(None) => continue,
@@ -233,7 +234,10 @@ pub async fn syn_scan_porta(
         }
     }
 
-    ResultadoSyn { porta, estado: EstadoPortaSyn::Filtrada }
+    ResultadoSyn {
+        porta,
+        estado: EstadoPortaSyn::Filtrada,
+    }
 }
 
 fn rand_seq() -> u32 {
@@ -257,7 +261,10 @@ mod tests {
 
     #[test]
     fn test_resultado_syn_struct() {
-        let r = ResultadoSyn { porta: 80, estado: EstadoPortaSyn::Aberta };
+        let r = ResultadoSyn {
+            porta: 80,
+            estado: EstadoPortaSyn::Aberta,
+        };
         assert_eq!(r.porta, 80);
         assert_eq!(r.estado, EstadoPortaSyn::Aberta);
     }
@@ -313,10 +320,7 @@ mod tests {
             .map(|_| thread::spawn(proxima_porta_origem))
             .collect();
 
-        let portas: Vec<u16> = handles
-            .into_iter()
-            .map(|h| h.join().unwrap())
-            .collect();
+        let portas: Vec<u16> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
         let unicas: HashSet<u16> = portas.iter().copied().collect();
         assert_eq!(
@@ -336,4 +340,3 @@ mod tests {
         assert_eq!(formula_antiga(80), formula_antiga(16463));
     }
 }
-

@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 use tracing::debug;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,12 +61,8 @@ fn construir_client_hello(sni: &str) -> Vec<u8> {
     corpo.push(0x00); // session_id vazio
 
     let cipher_suites: [u16; 14] = [
-        0x1301, 0x1302, 0x1303,
-        0xc02b, 0xc02f, 0xc02c, 0xc030,
-        0xcca9, 0xcca8,
-        0xc013, 0xc014,
-        0x009c, 0x009d,
-        0x002f,
+        0x1301, 0x1302, 0x1303, 0xc02b, 0xc02f, 0xc02c, 0xc030, 0xcca9, 0xcca8, 0xc013, 0xc014,
+        0x009c, 0x009d, 0x002f,
     ];
     corpo.extend_from_slice(&u16be((cipher_suites.len() * 2) as u16));
     for cs in cipher_suites {
@@ -243,13 +239,19 @@ pub async fn fingerprint_ja3s(ip: &str, porta: u16, timeout_ms: u64) -> Option<J
 
     let client_hello = construir_client_hello(ip);
 
-    if timeout(d_timeout, fluxo.write_all(&client_hello)).await.is_err() {
+    if timeout(d_timeout, fluxo.write_all(&client_hello))
+        .await
+        .is_err()
+    {
         debug!(ip, porta, "Falha ao enviar ClientHello para JA3S.");
         return None;
     }
 
     let mut header_record = [0u8; 5];
-    if timeout(d_timeout, fluxo.read_exact(&mut header_record)).await.is_err() {
+    if timeout(d_timeout, fluxo.read_exact(&mut header_record))
+        .await
+        .is_err()
+    {
         debug!(ip, porta, "Sem resposta ao ClientHello (JA3S).");
         return None;
     }
@@ -261,7 +263,10 @@ pub async fn fingerprint_ja3s(ip: &str, porta: u16, timeout_ms: u64) -> Option<J
 
     let tam_record = u16::from_be_bytes([header_record[3], header_record[4]]) as usize;
     let mut corpo_record = vec![0u8; tam_record];
-    if timeout(d_timeout, fluxo.read_exact(&mut corpo_record)).await.is_err() {
+    if timeout(d_timeout, fluxo.read_exact(&mut corpo_record))
+        .await
+        .is_err()
+    {
         debug!(ip, porta, "Corpo do ServerHello incompleto (JA3S).");
         return None;
     }

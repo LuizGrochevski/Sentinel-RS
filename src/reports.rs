@@ -1,14 +1,18 @@
 use crate::models::ResultadoPorta;
 use colored::*;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write as IoWrite;
-use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
     if let Err(e) = std::fs::create_dir_all("reports") {
-        eprintln!("{}: {}", "Erro crítico ao criar a pasta 'reports'".red().bold(), e);
+        eprintln!(
+            "{}: {}",
+            "Erro crítico ao criar a pasta 'reports'".red().bold(),
+            e
+        );
         std::process::exit(1);
     }
 
@@ -20,7 +24,10 @@ pub fn gerar_relatorios(dados_finais: &[ResultadoPorta]) {
         gerar_xml(dados_finais);
         gerar_nmap_xml(dados_finais);
     } else {
-        println!("{}", "Nenhuma porta aberta encontrada para gerar o relatório.".red());
+        println!(
+            "{}",
+            "Nenhuma porta aberta encontrada para gerar o relatório.".red()
+        );
     }
 }
 
@@ -28,12 +35,24 @@ fn gerar_json(dados_finais: &[ResultadoPorta]) {
     match File::create("reports/relatorio.json") {
         Ok(arquivo) => {
             if serde_json::to_writer_pretty(arquivo, dados_finais).is_ok() {
-                println!("{}", "💾 Relatório JSON salvo com sucesso em 'reports/relatorio.json'!".green().bold());
+                println!(
+                    "{}",
+                    "💾 Relatório JSON salvo com sucesso em 'reports/relatorio.json'!"
+                        .green()
+                        .bold()
+                );
             } else {
-                eprintln!("{}", "Erro: Falha ao estruturar os dados no arquivo JSON.".red());
+                eprintln!(
+                    "{}",
+                    "Erro: Falha ao estruturar os dados no arquivo JSON.".red()
+                );
             }
         }
-        Err(e) => eprintln!("{}: {}", "Erro ao criar o arquivo 'relatorio.json'".red(), e),
+        Err(e) => eprintln!(
+            "{}: {}",
+            "Erro ao criar o arquivo 'relatorio.json'".red(),
+            e
+        ),
     }
 }
 
@@ -42,7 +61,11 @@ fn gerar_markdown(dados_finais: &[ResultadoPorta]) {
         Ok(mut arquivo_md) => {
             let mut sucesso = true;
             sucesso &= writeln!(arquivo_md, "# 🛡 Relatório de Scan - Sentinel-RS\n").is_ok();
-            sucesso &= writeln!(arquivo_md, "| IP Alvo | Hostname | Porta | Status | Serviço Detectado |").is_ok();
+            sucesso &= writeln!(
+                arquivo_md,
+                "| IP Alvo | Hostname | Porta | Status | Serviço Detectado |"
+            )
+            .is_ok();
             sucesso &= writeln!(arquivo_md, "| :--- | :--- | :--- | :--- | :--- |").is_ok();
 
             for resultado in dados_finais {
@@ -54,13 +77,23 @@ fn gerar_markdown(dados_finais: &[ResultadoPorta]) {
                     resultado.porta,
                     resultado.status,
                     resultado.servico
-                ).is_ok();
+                )
+                .is_ok();
             }
 
             if sucesso {
-                println!("{}", "📊 Tabela em Markdown gerada em 'reports/relatorio.md'!".green().bold());
+                println!(
+                    "{}",
+                    "📊 Tabela em Markdown gerada em 'reports/relatorio.md'!"
+                        .green()
+                        .bold()
+                );
             } else {
-                eprintln!("{}", "Aviso: Algumas linhas não puderam ser escritas no relatório Markdown.".yellow());
+                eprintln!(
+                    "{}",
+                    "Aviso: Algumas linhas não puderam ser escritas no relatório Markdown."
+                        .yellow()
+                );
             }
         }
         Err(e) => eprintln!("{}: {}", "Erro ao criar o arquivo 'relatorio.md'".red(), e),
@@ -81,13 +114,22 @@ fn gerar_csv(dados_finais: &[ResultadoPorta]) {
                     resultado_csv.porta,
                     resultado_csv.status,
                     resultado_csv.servico
-                ).is_ok();
+                )
+                .is_ok();
             }
 
             if sucesso {
-                println!("{}", "📈 CSV gerado com sucesso em 'reports/relatorio.csv'!".green().bold());
+                println!(
+                    "{}",
+                    "📈 CSV gerado com sucesso em 'reports/relatorio.csv'!"
+                        .green()
+                        .bold()
+                );
             } else {
-                eprintln!("{}", "Aviso: Falha ao escrever os dados completos no CSV.".yellow());
+                eprintln!(
+                    "{}",
+                    "Aviso: Falha ao escrever os dados completos no CSV.".yellow()
+                );
             }
         }
         Err(e) => eprintln!("{}: {}", "Erro ao criar o arquivo 'relatorio.csv'".red(), e),
@@ -98,12 +140,24 @@ fn gerar_yaml(dados_finais: &[ResultadoPorta]) {
     match File::create("reports/relatorio.yaml") {
         Ok(arquivo_yaml) => {
             if serde_yaml::to_writer(arquivo_yaml, dados_finais).is_ok() {
-                println!("{}", "💾 Relatório YAML salvo com sucesso em 'reports/relatorio.yaml'!".green().bold());
+                println!(
+                    "{}",
+                    "💾 Relatório YAML salvo com sucesso em 'reports/relatorio.yaml'!"
+                        .green()
+                        .bold()
+                );
             } else {
-                eprintln!("{}", "Erro: Falha ao estruturar os dados no arquivo YAML.".red());
+                eprintln!(
+                    "{}",
+                    "Erro: Falha ao estruturar os dados no arquivo YAML.".red()
+                );
             }
         }
-        Err(e) => eprintln!("{}: {}", "Erro ao criar o arquivo 'relatorio.yaml'".red(), e),
+        Err(e) => eprintln!(
+            "{}: {}",
+            "Erro ao criar o arquivo 'relatorio.yaml'".red(),
+            e
+        ),
     }
 }
 
@@ -116,17 +170,28 @@ fn gerar_xml(dados_finais: &[ResultadoPorta]) {
                 itens: &'a [ResultadoPorta],
             }
 
-            let wrapper = Resultados { itens: dados_finais };
+            let wrapper = Resultados {
+                itens: dados_finais,
+            };
 
             match quick_xml::se::to_string(&wrapper) {
                 Ok(xml_conteudo) => {
-                    let mut sucesso = writeln!(arquivo_xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>").is_ok();
+                    let mut sucesso =
+                        writeln!(arquivo_xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>").is_ok();
                     sucesso &= writeln!(arquivo_xml, "{}", xml_conteudo).is_ok();
 
                     if sucesso {
-                        println!("{}", "🔮 Relatório XML gerado com sucesso em 'reports/relatorio.xml'!".green().bold());
+                        println!(
+                            "{}",
+                            "🔮 Relatório XML gerado com sucesso em 'reports/relatorio.xml'!"
+                                .green()
+                                .bold()
+                        );
                     } else {
-                        eprintln!("{}", "Erro: Falha ao escrever os dados no arquivo XML.".red());
+                        eprintln!(
+                            "{}",
+                            "Erro: Falha ao escrever os dados no arquivo XML.".red()
+                        );
                     }
                 }
                 Err(_) => eprintln!("{}", "Erro: Falha na serialização do XML.".red()),
@@ -145,7 +210,10 @@ fn gerar_nmap_xml(dados_finais: &[ResultadoPorta]) {
     // Agrupa portas por IP
     let mut hosts: HashMap<String, Vec<&ResultadoPorta>> = HashMap::new();
     for resultado in dados_finais {
-        hosts.entry(resultado.ip.clone()).or_default().push(resultado);
+        hosts
+            .entry(resultado.ip.clone())
+            .or_default()
+            .push(resultado);
     }
 
     let mut linhas: Vec<String> = Vec::new();
@@ -157,16 +225,23 @@ fn gerar_nmap_xml(dados_finais: &[ResultadoPorta]) {
     ));
 
     for (ip, portas) in &hosts {
-        let hostname = portas.first()
+        let hostname = portas
+            .first()
             .and_then(|p| p.hostname.as_deref())
             .unwrap_or("");
 
-        linhas.push(format!(r#"  <host starttime="{}" endtime="{}">"#, timestamp, timestamp));
+        linhas.push(format!(
+            r#"  <host starttime="{}" endtime="{}">"#,
+            timestamp, timestamp
+        ));
         linhas.push(format!(r#"    <status state="up" reason="syn-ack"/>"#));
         linhas.push(format!(r#"    <address addr="{}" addrtype="ipv4"/>"#, ip));
 
         if !hostname.is_empty() {
-            linhas.push(format!(r#"    <hostnames><hostname name="{}" type="PTR"/></hostnames>"#, hostname));
+            linhas.push(format!(
+                r#"    <hostnames><hostname name="{}" type="PTR"/></hostnames>"#,
+                hostname
+            ));
         } else {
             linhas.push(r#"    <hostnames/>"#.to_string());
         }
@@ -208,7 +283,10 @@ fn gerar_nmap_xml(dados_finais: &[ResultadoPorta]) {
         linhas.push(r#"  </host>"#.to_string());
     }
 
-    linhas.push(format!(r#"  <runstats><finished time="{}" elapsed="0"/></runstats>"#, timestamp));
+    linhas.push(format!(
+        r#"  <runstats><finished time="{}" elapsed="0"/></runstats>"#,
+        timestamp
+    ));
     linhas.push(r#"</nmaprun>"#.to_string());
 
     let conteudo = linhas.join("\n");
@@ -216,7 +294,12 @@ fn gerar_nmap_xml(dados_finais: &[ResultadoPorta]) {
     match File::create("reports/relatorio_nmap.xml") {
         Ok(mut arquivo) => {
             if arquivo.write_all(conteudo.as_bytes()).is_ok() {
-                println!("{}", "🗺  Relatório Nmap XML gerado em 'reports/relatorio_nmap.xml'!".green().bold());
+                println!(
+                    "{}",
+                    "🗺  Relatório Nmap XML gerado em 'reports/relatorio_nmap.xml'!"
+                        .green()
+                        .bold()
+                );
             } else {
                 eprintln!("{}", "Erro: Falha ao escrever o Nmap XML.".red());
             }

@@ -1,24 +1,24 @@
 mod cli;
+mod models;
 mod network;
 mod reports;
-mod models;
 
 use clap::Parser;
 use cli::Cli;
+use std::fs::File;
 use std::sync::Arc;
 use tokio::sync::Notify;
-use std::fs::File;
 
-use tracing::{info, warn, error, debug};
-use tracing_subscriber::{fmt, prelude::*, filter::LevelFilter};
+use tracing::{debug, error, info, warn};
+use tracing_subscriber::{filter::LevelFilter, fmt, prelude::*};
 
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
 
     let _ = std::fs::create_dir_all("logs");
-    let arquivo_log = File::create("logs/sentinel.log")
-        .expect("Falha ao criar arquivo de auditoria de log");
+    let arquivo_log =
+        File::create("logs/sentinel.log").expect("Falha ao criar arquivo de auditoria de log");
 
     let nivel_console = if args.verbose {
         LevelFilter::DEBUG

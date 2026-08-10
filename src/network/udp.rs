@@ -1,8 +1,8 @@
-use tokio::net::UdpSocket;
-use tokio::time::{timeout, Duration};
-use std::net::SocketAddr;
-use tracing::{debug, trace};
 use serde::Serialize;
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
+use tokio::time::{Duration, timeout};
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ResultadoUdp {
@@ -14,13 +14,28 @@ pub struct ResultadoUdp {
 
 impl ResultadoUdp {
     fn fechada() -> Self {
-        Self { status: "Fechada".to_string(), servico: None, produto: None, versao: None }
+        Self {
+            status: "Fechada".to_string(),
+            servico: None,
+            produto: None,
+            versao: None,
+        }
     }
     fn erro(msg: &str) -> Self {
-        Self { status: msg.to_string(), servico: None, produto: None, versao: None }
+        Self {
+            status: msg.to_string(),
+            servico: None,
+            produto: None,
+            versao: None,
+        }
     }
     fn aberta_filtrada(motivo: &str) -> Self {
-        Self { status: format!("Aberta | Filtrada ({})", motivo), servico: None, produto: None, versao: None }
+        Self {
+            status: format!("Aberta | Filtrada ({})", motivo),
+            servico: None,
+            produto: None,
+            versao: None,
+        }
     }
     fn identificada(servico: &str, produto: Option<&str>, versao: Option<String>) -> Self {
         Self {
@@ -86,15 +101,29 @@ fn interpretar_resposta_conhecida(porta: u16, buffer: &[u8], bytes_lidos: usize)
         123 => ResultadoUdp::identificada("NTP Server", Some("NTP"), None),
         161 => {
             let texto = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-            let printable: String = texto.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').collect();
-            let versao = if printable.trim().is_empty() { None } else { Some(printable.trim().to_string()) };
+            let printable: String = texto
+                .chars()
+                .filter(|c| c.is_ascii_graphic() || *c == ' ')
+                .collect();
+            let versao = if printable.trim().is_empty() {
+                None
+            } else {
+                Some(printable.trim().to_string())
+            };
             ResultadoUdp::identificada("SNMP Agent", Some("SNMP"), versao)
         }
         137 => ResultadoUdp::identificada("NetBIOS Name Service", Some("NetBIOS"), None),
         1900 => {
             let texto = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-            let server_line = texto.lines().find(|l| l.to_lowercase().starts_with("server:"));
-            let versao = server_line.map(|l| l.trim_start_matches("Server:").trim_start_matches("server:").trim().to_string());
+            let server_line = texto
+                .lines()
+                .find(|l| l.to_lowercase().starts_with("server:"));
+            let versao = server_line.map(|l| {
+                l.trim_start_matches("Server:")
+                    .trim_start_matches("server:")
+                    .trim()
+                    .to_string()
+            });
             ResultadoUdp::identificada("SSDP/UPnP", Some("UPnP"), versao)
         }
         5353 => ResultadoUdp::identificada("mDNS Responder", Some("mDNS"), None),
@@ -122,7 +151,11 @@ pub async fn escanear_porta_udp(ip: &str, porta: u16, timeout_ms: u64) -> Result
 
     let payload = obter_payload_porta(porta);
 
-    trace!("Disparando probe UDP para {} ({} bytes)", endereco_alvo, payload.len());
+    trace!(
+        "Disparando probe UDP para {} ({} bytes)",
+        endereco_alvo,
+        payload.len()
+    );
     if socket.send(&payload).await.is_err() {
         return ResultadoUdp::aberta_filtrada("Erro de Envio");
     }
@@ -130,7 +163,10 @@ pub async fn escanear_porta_udp(ip: &str, porta: u16, timeout_ms: u64) -> Result
     let mut buffer = [0; 512];
     match timeout(Duration::from_millis(timeout_ms), socket.recv(&mut buffer)).await {
         Ok(Ok(bytes_lidos)) => {
-            debug!("Resposta direta recebida na porta UDP {}: {} bytes", porta, bytes_lidos);
+            debug!(
+                "Resposta direta recebida na porta UDP {}: {} bytes",
+                porta, bytes_lidos
+            );
             interpretar_resposta_conhecida(porta, &buffer, bytes_lidos)
         }
         Ok(Result::Err(ref e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
@@ -148,7 +184,12 @@ pub async fn escanear_porta_udp(ip: &str, porta: u16, timeout_ms: u64) -> Result
             let _ = socket.send(payload_generico).await;
 
             let mut buffer_banner = [0; 256];
-            match timeout(Duration::from_millis(std::cmp::max(timeout_ms / 2, 10)), socket.recv(&mut buffer_banner)).await {
+            match timeout(
+                Duration::from_millis(std::cmp::max(timeout_ms / 2, 10)),
+                socket.recv(&mut buffer_banner),
+            )
+            .await
+            {
                 Ok(Ok(bytes_lidos)) if bytes_lidos > 0 => {
                     let texto = String::from_utf8_lossy(&buffer_banner[..bytes_lidos]);
                     let banner_limpo = texto.lines().next().unwrap_or("").trim();
