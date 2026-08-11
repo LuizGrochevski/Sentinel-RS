@@ -128,55 +128,56 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
 
     if let Some(certs) = sessao.peer_certificates()
         && let Some(cert_der) = certs.first()
-            && let Ok((_rem, cert)) = x509_parser::parse_x509_certificate(cert_der.as_ref()) {
-                // CN do subject
-                for rdn in cert.subject().iter() {
-                    for attr in rdn.iter() {
-                        if attr.attr_type().to_string() == "2.5.4.3" {
-                            certificado_cn =
-                                Some(attr.attr_value().as_str().unwrap_or("").to_string());
-                        }
-                    }
-                }
-
-                // Emissor
-                for rdn in cert.issuer().iter() {
-                    for attr in rdn.iter() {
-                        if attr.attr_type().to_string() == "2.5.4.3" {
-                            certificado_emissor =
-                                Some(attr.attr_value().as_str().unwrap_or("").to_string());
-                        }
-                    }
-                }
-
-                // Validade
-                let validade = cert.validity();
-                certificado_valido_ate = Some(validade.not_after.to_datetime().to_string());
-                let agora = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                certificado_expirado = (validade.not_after.timestamp() as u64) < agora;
-
-                // SANs
-                if let Ok(Some(san_ext)) = cert.subject_alternative_name() {
-                    for san in &san_ext.value.general_names {
-                        match san {
-                            x509_parser::extensions::GeneralName::DNSName(nome) => {
-                                certificado_sans.push(nome.to_string());
-                            }
-                            x509_parser::extensions::GeneralName::IPAddress(ip_bytes)
-                                if ip_bytes.len() == 4 => {
-                                    certificado_sans.push(format!(
-                                        "{}.{}.{}.{}",
-                                        ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]
-                                    ));
-                                }
-                            _ => {}
-                        }
-                    }
+        && let Ok((_rem, cert)) = x509_parser::parse_x509_certificate(cert_der.as_ref())
+    {
+        // CN do subject
+        for rdn in cert.subject().iter() {
+            for attr in rdn.iter() {
+                if attr.attr_type().to_string() == "2.5.4.3" {
+                    certificado_cn = Some(attr.attr_value().as_str().unwrap_or("").to_string());
                 }
             }
+        }
+
+        // Emissor
+        for rdn in cert.issuer().iter() {
+            for attr in rdn.iter() {
+                if attr.attr_type().to_string() == "2.5.4.3" {
+                    certificado_emissor =
+                        Some(attr.attr_value().as_str().unwrap_or("").to_string());
+                }
+            }
+        }
+
+        // Validade
+        let validade = cert.validity();
+        certificado_valido_ate = Some(validade.not_after.to_datetime().to_string());
+        let agora = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        certificado_expirado = (validade.not_after.timestamp() as u64) < agora;
+
+        // SANs
+        if let Ok(Some(san_ext)) = cert.subject_alternative_name() {
+            for san in &san_ext.value.general_names {
+                match san {
+                    x509_parser::extensions::GeneralName::DNSName(nome) => {
+                        certificado_sans.push(nome.to_string());
+                    }
+                    x509_parser::extensions::GeneralName::IPAddress(ip_bytes)
+                        if ip_bytes.len() == 4 =>
+                    {
+                        certificado_sans.push(format!(
+                            "{}.{}.{}.{}",
+                            ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 
     let ja3s = ja3s_fut.await;
 

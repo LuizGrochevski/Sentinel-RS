@@ -105,48 +105,49 @@ pub async fn detectar_servico(
     match porta {
         21 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
-                && bytes_lidos > 0 {
-                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    if let Some(stripped) = resposta.strip_prefix("220") {
-                        let banner = stripped.trim();
-                        return montar_resultado(format!(
-                            "FTP -> {}",
-                            banner.lines().next().unwrap_or("")
-                        ));
-                    }
-                    return montar_resultado(
-                        resposta.lines().next().unwrap_or("FTP").trim().to_string(),
-                    );
+                && bytes_lidos > 0
+            {
+                let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                if let Some(stripped) = resposta.strip_prefix("220") {
+                    let banner = stripped.trim();
+                    return montar_resultado(format!(
+                        "FTP -> {}",
+                        banner.lines().next().unwrap_or("")
+                    ));
                 }
+                return montar_resultado(
+                    resposta.lines().next().unwrap_or("FTP").trim().to_string(),
+                );
+            }
             montar_resultado("FTP (Sem Banner)".to_string())
         }
 
         22 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
-                && bytes_lidos > 0 {
-                    let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    return montar_resultado(
-                        banner.lines().next().unwrap_or("SSH").trim().to_string(),
-                    );
-                }
+                && bytes_lidos > 0
+            {
+                let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                return montar_resultado(banner.lines().next().unwrap_or("SSH").trim().to_string());
+            }
             montar_resultado("SSH (Sem Banner)".to_string())
         }
 
         25 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
-                && bytes_lidos > 0 {
-                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    if let Some(stripped) = resposta.strip_prefix("220") {
-                       let banner = stripped.trim();
-                        return montar_resultado(format!(
-                            "SMTP -> {}",
-                            banner.lines().next().unwrap_or("")
-                        ));
-                    }
-                    return montar_resultado(
-                        resposta.lines().next().unwrap_or("SMTP").trim().to_string(),
-                    );
+                && bytes_lidos > 0
+            {
+                let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                if let Some(stripped) = resposta.strip_prefix("220") {
+                    let banner = stripped.trim();
+                    return montar_resultado(format!(
+                        "SMTP -> {}",
+                        banner.lines().next().unwrap_or("")
+                    ));
                 }
+                return montar_resultado(
+                    resposta.lines().next().unwrap_or("SMTP").trim().to_string(),
+                );
+            }
             montar_resultado("SMTP (Sem Banner)".to_string())
         }
 
@@ -203,28 +204,28 @@ pub async fn detectar_servico(
                     if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok()
                         && let Ok(Ok(bytes_lidos)) =
                             timeout(d_timeout, fluxo_tls.read(&mut buffer)).await
-                            && bytes_lidos > 0 {
-                                let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                                let status_line = resposta.lines().next().unwrap_or("").trim();
+                        && bytes_lidos > 0
+                    {
+                        let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                        let status_line = resposta.lines().next().unwrap_or("").trim();
 
-                                let mut banner_servidor = String::new();
-                                for linha in resposta.lines() {
-                                    if linha.to_lowercase().starts_with("server:") {
-                                        banner_servidor =
-                                            linha["server:".len()..].trim().to_string();
-                                        break;
-                                    }
-                                }
-
-                                if !banner_servidor.is_empty() {
-                                    return montar_resultado(format!(
-                                        "HTTPS ({}) -> Servidor: {}",
-                                        status_line, banner_servidor
-                                    ));
-                                } else if !status_line.is_empty() {
-                                    return montar_resultado(format!("HTTPS ({})", status_line));
-                                }
+                        let mut banner_servidor = String::new();
+                        for linha in resposta.lines() {
+                            if linha.to_lowercase().starts_with("server:") {
+                                banner_servidor = linha["server:".len()..].trim().to_string();
+                                break;
                             }
+                        }
+
+                        if !banner_servidor.is_empty() {
+                            return montar_resultado(format!(
+                                "HTTPS ({}) -> Servidor: {}",
+                                status_line, banner_servidor
+                            ));
+                        } else if !status_line.is_empty() {
+                            return montar_resultado(format!("HTTPS ({})", status_line));
+                        }
+                    }
                     return montar_resultado("HTTPS (Conexão Segura Estabelecida)".to_string());
                 }
             }
@@ -235,35 +236,34 @@ pub async fn detectar_servico(
 
         3306 => {
             if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
-                && bytes_lidos > 5 {
-                    let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
-                    if resposta.contains("mysql")
-                        || resposta.contains("MariaDB")
-                        || !resposta.is_empty()
-                    {
-                        let versao = resposta.lines().next().unwrap_or("MySQL").trim();
-                        let versao_limpa: String = versao
-                            .chars()
-                            .filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c))
-                            .collect();
-                        return montar_resultado(format!(
-                            "MySQL/MariaDB ({})",
-                            versao_limpa.trim()
-                        ));
-                    }
+                && bytes_lidos > 5
+            {
+                let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
+                if resposta.contains("mysql")
+                    || resposta.contains("MariaDB")
+                    || !resposta.is_empty()
+                {
+                    let versao = resposta.lines().next().unwrap_or("MySQL").trim();
+                    let versao_limpa: String = versao
+                        .chars()
+                        .filter(|c| c.is_alphanumeric() || ".-_ ".contains(*c))
+                        .collect();
+                    return montar_resultado(format!("MySQL/MariaDB ({})", versao_limpa.trim()));
                 }
+            }
             montar_resultado("MySQL (Provável)".to_string())
         }
 
         6379 => {
             let probe_redis = "PING\r\n";
             if fluxo.write_all(probe_redis.as_bytes()).await.is_ok()
-                && let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
-                    let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    if resposta.contains("+PONG") {
-                        return montar_resultado("Redis Cache Server (Ativo)".to_string());
-                    }
+                && let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
+            {
+                let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                if resposta.contains("+PONG") {
+                    return montar_resultado("Redis Cache Server (Ativo)".to_string());
                 }
+            }
             montar_resultado("Redis (Provável)".to_string())
         }
 
@@ -278,34 +278,32 @@ pub async fn detectar_servico(
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
                 let timeout_leitura = Duration::from_millis(std::cmp::min(timeout_ms, 100));
                 if let Ok(Ok(bytes_lidos)) = timeout(timeout_leitura, fluxo.read(&mut buffer)).await
-                    && bytes_lidos > 0 {
-                        let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                        let primeira_linha = banner.lines().next().unwrap_or("").trim();
+                    && bytes_lidos > 0
+                {
+                    let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
+                    let primeira_linha = banner.lines().next().unwrap_or("").trim();
 
-                        if primeira_linha.to_uppercase().starts_with("HTTP/") {
-                            let mut banner_servidor = String::new();
-                            for linha in banner.lines() {
-                                if linha.to_lowercase().starts_with("server:") {
-                                    banner_servidor = linha["server:".len()..].trim().to_string();
-                                    break;
-                                }
+                    if primeira_linha.to_uppercase().starts_with("HTTP/") {
+                        let mut banner_servidor = String::new();
+                        for linha in banner.lines() {
+                            if linha.to_lowercase().starts_with("server:") {
+                                banner_servidor = linha["server:".len()..].trim().to_string();
+                                break;
                             }
-                            if !banner_servidor.is_empty() {
-                                return montar_resultado(format!(
-                                    "HTTP/Serviço Web ({}) -> Servidor: {}",
-                                    primeira_linha, banner_servidor
-                                ));
-                            }
+                        }
+                        if !banner_servidor.is_empty() {
                             return montar_resultado(format!(
-                                "HTTP/Serviço Web ({})",
-                                primeira_linha
+                                "HTTP/Serviço Web ({}) -> Servidor: {}",
+                                primeira_linha, banner_servidor
                             ));
                         }
-
-                        if !primeira_linha.is_empty() {
-                            return montar_resultado(primeira_linha.to_string());
-                        }
+                        return montar_resultado(format!("HTTP/Serviço Web ({})", primeira_linha));
                     }
+
+                    if !primeira_linha.is_empty() {
+                        return montar_resultado(primeira_linha.to_string());
+                    }
+                }
             }
             montar_resultado(nome_padrao_porta(porta))
         }

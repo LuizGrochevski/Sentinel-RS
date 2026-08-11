@@ -56,7 +56,8 @@ pub fn verificar_permissao_raw_socket() -> bool {
     transport::transport_channel(
         1024,
         TransportChannelType::Layer4(TransportProtocol::Ipv4(IpNextHeaderProtocols::Tcp)),
-    ).is_ok()
+    )
+    .is_ok()
 }
 
 /// Obtém o IP local da interface padrão
@@ -65,9 +66,10 @@ fn obter_ip_local() -> Option<Ipv4Addr> {
         if interface.is_up() && !interface.is_loopback() {
             for ip in &interface.ips {
                 if let IpAddr::V4(ipv4) = ip.ip()
-                    && !ipv4.is_loopback() {
-                        return Some(ipv4);
-                    }
+                    && !ipv4.is_loopback()
+                {
+                    return Some(ipv4);
+                }
             }
         }
     }
@@ -181,9 +183,10 @@ pub async fn syn_scan_porta(dst_ip: Ipv4Addr, porta: u16, timeout_ms: u64) -> Re
         match iter.next_with_timeout(Duration::from_millis(100)) {
             Ok(Some((packet, addr))) => {
                 if let IpAddr::V4(src) = addr
-                    && src != dst_ip {
-                        continue;
-                    }
+                    && src != dst_ip
+                {
+                    continue;
+                }
 
                 // Filtra pacotes que não são resposta a ESTA porta de origem
                 // específica — essencial agora que cada chamada usa uma porta

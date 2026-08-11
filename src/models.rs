@@ -46,7 +46,9 @@ pub fn checar_vulnerabilidades(banner: &str) -> Option<VulnerabilidadeConhecida>
         },
     ];
 
-    base_dados.into_iter().find(|vuln| banner.contains(vuln.gatilho))
+    base_dados
+        .into_iter()
+        .find(|vuln| banner.contains(vuln.gatilho))
 }
 
 #[cfg(test)]
