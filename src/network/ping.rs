@@ -11,11 +11,9 @@ pub async fn verificar_host_ativo(ip: &str, timeout_ms: u64) -> bool {
             TcpStream::connect(&endereco),
         )
         .await
-        {
-            if resultado_conexao.is_ok() {
+            && resultado_conexao.is_ok() {
                 return true;
             }
-        }
     }
     false
 }

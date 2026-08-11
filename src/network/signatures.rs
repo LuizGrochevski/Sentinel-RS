@@ -354,16 +354,6 @@ pub fn identificar_estruturado(
     (None, None, None)
 }
 
-pub fn identificar_por_banner(banner: &str) -> Option<String> {
-    let (nome, versao, categoria) = identificar_estruturado(banner);
-    let nome = nome?;
-    let categoria = categoria.unwrap_or("Desconhecido");
-    match versao {
-        Some(v) => Some(format!("{} {} [{}]", nome, v, categoria)),
-        None => Some(format!("{} [{}]", nome, categoria)),
-    }
-}
-
 fn extrair_versao(banner: &str, gatilho: &str) -> Option<String> {
     let idx = banner.to_lowercase().find(&gatilho.to_lowercase())?;
     let depois = &banner[idx + gatilho.len()..];
@@ -380,50 +370,6 @@ fn extrair_versao(banner: &str, gatilho: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_identificar_apache() {
-        let resultado = identificar_por_banner("Server: Apache/2.4.51 (Ubuntu)");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("Apache HTTPD"));
-    }
-
-    #[test]
-    fn test_identificar_nginx() {
-        let resultado = identificar_por_banner("Server: nginx/1.18.0");
-        assert!(resultado.is_some());
-        let r = resultado.unwrap();
-        assert!(r.contains("Nginx"));
-        assert!(r.contains("1.18.0"));
-    }
-
-    #[test]
-    fn test_identificar_openssh() {
-        let resultado = identificar_por_banner("SSH-2.0-OpenSSH_8.9p1 Ubuntu-3");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("OpenSSH"));
-    }
-
-    #[test]
-    fn test_identificar_redis() {
-        let resultado = identificar_por_banner("+PONG\r\n");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("Redis"));
-    }
-
-    #[test]
-    fn test_identificar_mysql() {
-        let resultado = identificar_por_banner("MySQL 8.0.32 Community Server");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("MySQL"));
-    }
-
-    #[test]
-    fn test_sem_assinatura() {
-        let resultado = identificar_por_banner("banner desconhecido xyz");
-        assert!(resultado.is_none());
-    }
 
     #[test]
     fn test_extrair_versao_nginx() {
@@ -435,46 +381,5 @@ mod tests {
     fn test_extrair_versao_apache() {
         let versao = super::extrair_versao("Apache/2.4.51 (Ubuntu)", "Apache/");
         assert_eq!(versao, Some("2.4.51".to_string()));
-    }
-
-    #[test]
-    fn test_case_insensitive() {
-        let resultado = identificar_por_banner("SERVER: NGINX/1.20.0");
-        assert!(resultado.is_some());
-    }
-
-    #[test]
-    fn test_identificar_goahead() {
-        let resultado = identificar_por_banner("Server: GoAhead-Webs");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("GoAhead"));
-    }
-
-    #[test]
-    fn test_identificar_rompager() {
-        let resultado = identificar_por_banner("Server: RomPager/4.07 UPnP/1.0");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("RomPager"));
-    }
-
-    #[test]
-    fn test_identificar_mosquitto() {
-        let resultado = identificar_por_banner("mosquitto version 2.0.15");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("Mosquitto"));
-    }
-
-    #[test]
-    fn test_identificar_zabbix() {
-        let resultado = identificar_por_banner("ZBXD Zabbix Agent");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("Zabbix"));
-    }
-
-    #[test]
-    fn test_identificar_hikvision() {
-        let resultado = identificar_por_banner("Server: App-webs/Hikvision");
-        assert!(resultado.is_some());
-        assert!(resultado.unwrap().contains("Hikvision"));
     }
 }

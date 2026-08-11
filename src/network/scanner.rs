@@ -159,12 +159,11 @@ pub async fn executar_scan(
             let timeout_ms = args_compartilhado.timeout;
 
             tarefas_ping.push(tokio::spawn(async move {
-                if let Ok(_guarda) = sem.acquire().await {
-                    if verificar_host_ativo(&ip_str, timeout_ms).await {
+                if let Ok(_guarda) = sem.acquire().await
+                    && verificar_host_ativo(&ip_str, timeout_ms).await {
                         let mut ativos = ativos_clone.lock().await;
                         ativos.push(ip_str);
                     }
-                }
             }));
         }
 
@@ -345,8 +344,8 @@ pub async fn executar_scan(
                         )
                         .await;
 
-                        if trabalho.porta == 443 || trabalho.porta == 8443 {
-                            if let Some(tls_info) = fingerprint_tls(
+                        if (trabalho.porta == 443 || trabalho.porta == 8443)
+                            && let Some(tls_info) = fingerprint_tls(
                                 &trabalho.ip,
                                 trabalho.porta,
                                 args_worker_clone.timeout * 3,
@@ -359,7 +358,6 @@ pub async fn executar_scan(
                                     tls_info.resumo()
                                 );
                             }
-                        }
                     }
                 }
 

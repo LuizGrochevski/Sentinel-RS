@@ -234,7 +234,7 @@ fn gerar_nmap_xml(dados_finais: &[ResultadoPorta]) {
             r#"  <host starttime="{}" endtime="{}">"#,
             timestamp, timestamp
         ));
-        linhas.push(format!(r#"    <status state="up" reason="syn-ack"/>"#));
+        linhas.push(r#"    <status state="up" reason="syn-ack"/>"#.to_string());
         linhas.push(format!(r#"    <address addr="{}" addrtype="ipv4"/>"#, ip));
 
         if !hostname.is_empty() {

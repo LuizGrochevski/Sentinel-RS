@@ -8,5 +8,8 @@ pub use scanner::executar_scan;
 
 pub mod ja3;
 pub mod signatures;
+
+#[allow(dead_code)]
 pub mod syn;
+
 pub mod tls;

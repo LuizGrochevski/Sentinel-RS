@@ -53,13 +53,10 @@ pub struct ResultadoSyn {
 
 /// Verifica se o processo tem permissão para raw sockets
 pub fn verificar_permissao_raw_socket() -> bool {
-    match transport::transport_channel(
+    transport::transport_channel(
         1024,
         TransportChannelType::Layer4(TransportProtocol::Ipv4(IpNextHeaderProtocols::Tcp)),
-    ) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    ).is_ok()
 }
 
 /// Obtém o IP local da interface padrão
@@ -67,11 +64,10 @@ fn obter_ip_local() -> Option<Ipv4Addr> {
     for interface in datalink::interfaces() {
         if interface.is_up() && !interface.is_loopback() {
             for ip in &interface.ips {
-                if let IpAddr::V4(ipv4) = ip.ip() {
-                    if !ipv4.is_loopback() {
+                if let IpAddr::V4(ipv4) = ip.ip()
+                    && !ipv4.is_loopback() {
                         return Some(ipv4);
                     }
-                }
             }
         }
     }
@@ -184,11 +180,10 @@ pub async fn syn_scan_porta(dst_ip: Ipv4Addr, porta: u16, timeout_ms: u64) -> Re
 
         match iter.next_with_timeout(Duration::from_millis(100)) {
             Ok(Some((packet, addr))) => {
-                if let IpAddr::V4(src) = addr {
-                    if src != dst_ip {
+                if let IpAddr::V4(src) = addr
+                    && src != dst_ip {
                         continue;
                     }
-                }
 
                 // Filtra pacotes que não são resposta a ESTA porta de origem
                 // específica — essencial agora que cada chamada usa uma porta

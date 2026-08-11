@@ -104,11 +104,11 @@ pub async fn detectar_servico(
 
     match porta {
         21 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
-                if bytes_lidos > 0 {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
+                && bytes_lidos > 0 {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    if resposta.starts_with("220") {
-                        let banner = resposta["220".len()..].trim();
+                    if let Some(stripped) = resposta.strip_prefix("220") {
+                        let banner = stripped.trim();
                         return montar_resultado(format!(
                             "FTP -> {}",
                             banner.lines().next().unwrap_or("")
@@ -118,28 +118,26 @@ pub async fn detectar_servico(
                         resposta.lines().next().unwrap_or("FTP").trim().to_string(),
                     );
                 }
-            }
             montar_resultado("FTP (Sem Banner)".to_string())
         }
 
         22 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
-                if bytes_lidos > 0 {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
+                && bytes_lidos > 0 {
                     let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     return montar_resultado(
                         banner.lines().next().unwrap_or("SSH").trim().to_string(),
                     );
                 }
-            }
             montar_resultado("SSH (Sem Banner)".to_string())
         }
 
         25 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
-                if bytes_lidos > 0 {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
+                && bytes_lidos > 0 {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
-                    if resposta.starts_with("220") {
-                        let banner = resposta["220".len()..].trim();
+                    if let Some(stripped) = resposta.strip_prefix("220") {
+                       let banner = stripped.trim();
                         return montar_resultado(format!(
                             "SMTP -> {}",
                             banner.lines().next().unwrap_or("")
@@ -149,7 +147,6 @@ pub async fn detectar_servico(
                         resposta.lines().next().unwrap_or("SMTP").trim().to_string(),
                     );
                 }
-            }
             montar_resultado("SMTP (Sem Banner)".to_string())
         }
 
@@ -203,11 +200,10 @@ pub async fn detectar_servico(
                         ip
                     );
 
-                    if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok() {
-                        if let Ok(Ok(bytes_lidos)) =
+                    if fluxo_tls.write_all(requisicao.as_bytes()).await.is_ok()
+                        && let Ok(Ok(bytes_lidos)) =
                             timeout(d_timeout, fluxo_tls.read(&mut buffer)).await
-                        {
-                            if bytes_lidos > 0 {
+                            && bytes_lidos > 0 {
                                 let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                                 let status_line = resposta.lines().next().unwrap_or("").trim();
 
@@ -229,8 +225,6 @@ pub async fn detectar_servico(
                                     return montar_resultado(format!("HTTPS ({})", status_line));
                                 }
                             }
-                        }
-                    }
                     return montar_resultado("HTTPS (Conexão Segura Estabelecida)".to_string());
                 }
             }
@@ -240,8 +234,8 @@ pub async fn detectar_servico(
         5432 => montar_resultado("PostgreSQL".to_string()),
 
         3306 => {
-            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
-                if bytes_lidos > 5 {
+            if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await
+                && bytes_lidos > 5 {
                     let resposta = String::from_utf8_lossy(&buffer[5..bytes_lidos]);
                     if resposta.contains("mysql")
                         || resposta.contains("MariaDB")
@@ -258,20 +252,18 @@ pub async fn detectar_servico(
                         ));
                     }
                 }
-            }
             montar_resultado("MySQL (Provável)".to_string())
         }
 
         6379 => {
             let probe_redis = "PING\r\n";
-            if fluxo.write_all(probe_redis.as_bytes()).await.is_ok() {
-                if let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
+            if fluxo.write_all(probe_redis.as_bytes()).await.is_ok()
+                && let Ok(Ok(bytes_lidos)) = timeout(d_timeout, fluxo.read(&mut buffer)).await {
                     let resposta = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                     if resposta.contains("+PONG") {
                         return montar_resultado("Redis Cache Server (Ativo)".to_string());
                     }
                 }
-            }
             montar_resultado("Redis (Provável)".to_string())
         }
 
@@ -286,8 +278,7 @@ pub async fn detectar_servico(
             if fluxo.write_all(requisicao.as_bytes()).await.is_ok() {
                 let timeout_leitura = Duration::from_millis(std::cmp::min(timeout_ms, 100));
                 if let Ok(Ok(bytes_lidos)) = timeout(timeout_leitura, fluxo.read(&mut buffer)).await
-                {
-                    if bytes_lidos > 0 {
+                    && bytes_lidos > 0 {
                         let banner = String::from_utf8_lossy(&buffer[..bytes_lidos]);
                         let primeira_linha = banner.lines().next().unwrap_or("").trim();
 
@@ -315,7 +306,6 @@ pub async fn detectar_servico(
                             return montar_resultado(primeira_linha.to_string());
                         }
                     }
-                }
             }
             montar_resultado(nome_padrao_porta(porta))
         }

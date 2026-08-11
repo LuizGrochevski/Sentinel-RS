@@ -31,6 +31,14 @@ impl TlsInfo {
             partes.push(format!("CN={}", cn));
         }
 
+        if let Some(emissor) = &self.certificado_emissor {
+            partes.push(format!("emissor={}", emissor));
+        }
+
+        if !self.certificado_sans.is_empty() {
+            partes.push(format!("SANs={}", self.certificado_sans.join(",")));
+        }
+
         if self.certificado_expirado {
             partes.push("⚠️ CERTIFICADO EXPIRADO".to_string());
         }
@@ -118,9 +126,9 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
     let mut certificado_valido_ate = None;
     let mut certificado_expirado = false;
 
-    if let Some(certs) = sessao.peer_certificates() {
-        if let Some(cert_der) = certs.first() {
-            if let Ok((_rem, cert)) = x509_parser::parse_x509_certificate(cert_der.as_ref()) {
+    if let Some(certs) = sessao.peer_certificates()
+        && let Some(cert_der) = certs.first()
+            && let Ok((_rem, cert)) = x509_parser::parse_x509_certificate(cert_der.as_ref()) {
                 // CN do subject
                 for rdn in cert.subject().iter() {
                     for attr in rdn.iter() {
@@ -157,21 +165,18 @@ pub async fn fingerprint_tls(ip: &str, porta: u16, timeout_ms: u64) -> Option<Tl
                             x509_parser::extensions::GeneralName::DNSName(nome) => {
                                 certificado_sans.push(nome.to_string());
                             }
-                            x509_parser::extensions::GeneralName::IPAddress(ip_bytes) => {
-                                if ip_bytes.len() == 4 {
+                            x509_parser::extensions::GeneralName::IPAddress(ip_bytes)
+                                if ip_bytes.len() == 4 => {
                                     certificado_sans.push(format!(
                                         "{}.{}.{}.{}",
                                         ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]
                                     ));
                                 }
-                            }
                             _ => {}
                         }
                     }
                 }
             }
-        }
-    }
 
     let ja3s = ja3s_fut.await;
 
